@@ -1,3 +1,5 @@
 *_test*.py
 flags/
 flags/*
+__pycache__
+.venv

@@ -1,0 +1,10 @@
+blessed==1.52.0
+enlighten==1.14.1
+jinxed==2.1.0
+markdown-it-py==4.3.0
+mdurl==0.1.2
+prefixed==0.9.0
+Pygments==2.21.0
+rich==15.0.0
+wcwidth==0.9.4
+dowhen==0.1.0

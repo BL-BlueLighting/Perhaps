@@ -1,5 +1,5 @@
 """
-DoasRootOfMylife
+doas -su mylife.root
 Base Framework
 
 Usage:
@@ -70,6 +70,20 @@ def run_injects(inject_point_name: str, *args, **kwargs):
         else:
             return (-1, ret)
     return ret
+#endregion
+
+#region Command Creator
+def register(command: str):
+    """
+    :param command: 命令的执行名称
+    """
+    def decorator(func: Callable) -> Callable:
+        registry[command] = func
+        return func
+    
+    return decorator
+
+
 #endregion
 
 #region Functions

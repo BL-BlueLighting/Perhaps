@@ -41,16 +41,17 @@ elgnmgr = enlighten.get_manager()
 print = console.print
 registry: dict[str, Callable[["Arguments"], "Arguments"]] = {}
 
+COMMAND_NOT_FOUND = "CNF-1"
+
 #region Injector
 injects: dict[str, Callable] = {}
 
-def inject(inject_point: str, inject_callback: Callable):
+def inject(inject_point: str):
     """
     :param inject_point: 注入点名称
-    :param inject_callback: 接收被装饰函数 func，返回实际要注册到注入点的回调
     """
     def decorator(func: Callable) -> Callable:
-        injects[inject_point] = inject_callback(func)
+        injects[inject_point] = func
         return func
 
     return decorator
@@ -59,7 +60,7 @@ def inject(inject_point: str, inject_callback: Callable):
 def run_injects(inject_point_name: str, *args, **kwargs):
     callback = injects.get(inject_point_name)
     if callback is None:
-        return None
+        return (Arguments(["0"]))
     ret = callback(*args, **kwargs)
     if type(ret) == tuple or type(ret) == list:
         # break actions now
@@ -69,7 +70,15 @@ def run_injects(inject_point_name: str, *args, **kwargs):
             return (retnd, ret)
         else:
             return (-1, ret)
+    return (ret)
+
+def run_patcher(inject_point_name: str, *args, **kwargs):
+    callback = injects.get(inject_point_name)
+    if callback == None:
+        return ("stable_no_change")
+    ret = callback(*args, **kwargs)
     return ret
+
 #endregion
 
 #region Command Creator
@@ -173,12 +182,18 @@ class Command:
                 # why do not continue interpret tunnel?
                 # because next command will interpret tunnel too, recursive interpret is greater than repeat write.
                 continue
+            else:
+                self.args.append(arg)
 
             if tunnel:
                 subcmd.append(arg)
 
+            
+
         if subcmd != []:
             self.tunnel = Command(subcmd)
+
+        
 
     def __call__(self, tunnel_ret: Arguments | None = None):
         return self.execute(tunnel_ret)
@@ -186,12 +201,20 @@ class Command:
     def execute(self, tunnel_ret: Arguments | None = None):
         returns: list[Arguments] = []
         # find registry
+        if not self.head in registry:
+            print("humansh: command not found: " + self.head)
+
         for cmd, func in registry.items():
             if self.head == cmd:
                 ret = func(Arguments(self.args, tunnel_ret))
+                if ret == None:
+                    ret = Arguments([0])
+                if ret [0] == COMMAND_NOT_FOUND:
+                    print("humansh: command not found: " + self.head)
                 if self.tunnel != None:
                     self.tunnel(Arguments(ret.__getargs__(), ret))
                 returns.append(ret)
+        
         return returns
                     
 
@@ -227,7 +250,7 @@ def setup():
     ret = run_injects("before_setup")
     if type(ret) == tuple:
         # do not run example setup.
-        ret[1][1]()
+
         return
 
     def setup_phase2(i: int):
@@ -293,7 +316,7 @@ if not flags("skipload"):
     ret = run_injects("before_load")
     if type(ret) == tuple:
         # do not run init pre-comment
-        ret[1][1]()
+        pass
     else:
         initpre = open("./texts/initpre.txt", "r").readlines()
 
@@ -315,7 +338,7 @@ def init():
     ret = run_injects("before_shell_pre")
     if type(ret) == tuple:
         # do not output normal shell precomment
-        ret[1][1]()
+
         return
 
     print("[green]Welcome to HumanOS [/green]([cyan]v7.2.14-nature5-5-nature[/cyan]) !")
@@ -342,22 +365,42 @@ def main_while():
     # faq
 
     directory = "~"
+    prompt = "{username}@{hostname}:{directory}$ "
 
     while True:
         run_injects("while_head")
         run_injects("userinfo", username, password_hash, hostname, salt)
         run_injects("getdir", directory)
+
+        prompt_patch = run_patcher("prompt_patcher", prompt, (username, password_hash, hostname, salt), directory)
+        if prompt_patch != "stable_no_change":
+            prompt = prompt_patch
+
         try:
-            ipt = input(f"{username}@{hostname}:{directory}$ ")
+            ipt = console.input(prompt)
+            if ipt.strip() == "":
+                continue
+
+            if ipt == "exit":
+                raise KeyboardInterrupt
         except KeyboardInterrupt or EOFError:
             print("\nLogging out...")
             exit(0)
         else:
-            run_injects("after_enter", ipt)
+            ret = run_injects("after_enter", ipt)
+            if ret[0] == -1:
+                # interrupt command parse
+                # control by ret auto use
+                continue
+            
             cmd = Command(ipt)
             cmd.parse()
             run_injects("before_execute", cmd)
-            returns = cmd.execute()
+            try:
+                returns = cmd.execute()
+            except IndexError:
+                print(f"{cmd.head}: arguments not enough")
+                continue
             run_injects("after_execute", cmd, returns)
 #endregion
 

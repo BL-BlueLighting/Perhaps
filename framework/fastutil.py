@@ -7,6 +7,7 @@ Base tools of DROM stories.
 
 from framework.base import *
 from framework.saving import *
+from framework.fileutil import *
 from typing import Any
 
 #region Functions / Variables
@@ -235,6 +236,20 @@ def mkachieve(achieve_name: str, achieve_desc: str, achieve_id: str):
     print(f"[cyan][!][/cyan] 获得成就：{achieve_name}")
     print(f"    [dim]{achieve_desc}[/dim]")
     mkflag(achieve_id, f":: 成就：{achieve_name}\n    - {achieve_desc}")
+
+def fs_writesave(fs: FileSystem):
+    save.fileSystem = fs.__str__()
+
+def fs_fromsave() -> FileSystem:
+    fs = FileSystem({}, [])
+    fs.LoadFromFile(save.fileSystem)
+    return fs
+
+def fs_initialize(fs: FileSystem):
+    if save.gotattr("fileSystem"):
+        fs_fromsave()
+    else:
+        fs_writesave(fs)
 
 @register("setslot")
 def setslot(args: Arguments):

@@ -655,7 +655,7 @@ def CreateFile(
     )
     return fs.AddFile(file_parent, fileinfo)
 
-CreateFile("sh", file_content=["<BINARY>"], file_owner=["root"], file_parent="/bin")
+CreateFile("humansh", file_content=["<BINARY>"], file_owner=["root"], file_parent="/bin")
 CreateFile("hostname", file_content=["humanos"], file_owner=["root"], file_parent="/etc")
 CreateFile(
     "hosts",

@@ -11,9 +11,9 @@
 </div>
 
 ## 简述
-- Chapter: Pre
-- Chapter: 1
-- Chapter: 2
+- Chapter: Pre = Unexpected Corruptions: 未知差错
+- Chapter: 1 = Repent, then Recreate: 回头，重建。
+- Chapter: 2 = ???? ????
 
 正在逐步迁移剧情，重置剧情等。
 

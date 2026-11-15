@@ -3,3 +3,5 @@ flags/
 flags/*
 __pycache__
 .venv
+.idea/
+.vscode/

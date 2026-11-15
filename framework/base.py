@@ -258,6 +258,12 @@ class Arguments:
 
     def __getargs__(self):
         return self.args
+
+    def __len__(self):
+        return len(self.args)
+
+    def __iter__(self):
+        return iter(self.args)
     
 #endregion
 
@@ -353,6 +359,7 @@ if not flags("skipload"):
 
 #region Shell Pre
 def init():
+    """Welcome information"""
     clear()
     ret = run_injects("before_shell_pre")
     if type(ret) == tuple:
@@ -374,6 +381,7 @@ def init():
 
 #region Main While
 def main_while():
+    """Run doas -su mylife.root framework main loop"""
     username, password_hash, hostname, salt = open('./flags/userinfo', 'r').readlines()
 
     username = username.strip()
@@ -391,9 +399,14 @@ def main_while():
         run_injects("userinfo", username, password_hash, hostname, salt)
         run_injects("getdir", directory)
 
+        dir_patch = run_patcher("directory_patcher", directory)
         prompt_patch = run_patcher("prompt_patcher", prompt, (username, password_hash, hostname, salt), directory)
+
         if prompt_patch != "stable_no_change":
             prompt = prompt_patch
+
+        if dir_patch != "stable_no_change":
+            directory = dir_patch
 
         try:
             ipt = console.input(prompt)

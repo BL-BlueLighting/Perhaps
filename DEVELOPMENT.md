@@ -99,6 +99,17 @@
 
 此时将应用修补。
 
+### `dir_patcher` (`PATCHER`)
+修补点为 `base.py:L403`, 在 `prompt_patcher` PATCH 前开始修补。
+
+参数：
+- `directory: str`
+
+返回：
+- `str`
+
+此时将应用修补。
+
 ## FRAMEWORK Chapter develop navigator
 
 ### register command

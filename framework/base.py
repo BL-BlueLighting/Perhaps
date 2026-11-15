@@ -96,6 +96,11 @@ def register(command: str):
 #endregion
 
 #region Functions
+def mkflag(flag_name: str, writeln: str = ""):
+    if not os.path.exists("./flags"):
+        os.mkdir("./flags")
+    open(f"./flags/{flag_name}", "w").write(writeln)
+
 def clear():
     """Clear console"""
     console.clear()
@@ -107,6 +112,13 @@ def flags(flag_name: str):
             return True
         else:
             return False
+
+def rdflag(flag_name: str) -> str:
+    """Read flag content"""
+    if not flags(flag_name):
+        return ""
+    else:
+        return open(f"./flags/{flag_name}", "r").read()
 
 def process(desc: str, total: int = 100, unit: str = "items"):
     """Create enlighten process"""
@@ -146,6 +158,8 @@ def common_process_loop(
     if type(callback) != None:
         callback() #type: ignore
 
+    elgnmgr.stop()
+
 class Command:
     """
     Parse and execute Command
@@ -169,7 +183,12 @@ class Command:
 
         This function will use shlex to automatic split and recursive parse tunnels.
         """
-        self.data = shlex.split(self.cmd)
+        try:
+            self.data = shlex.split(self.cmd)
+        except:
+            print("humansh: your command has syntax errors. please check then try again.")
+            self.data = ["SYNTAX_ERROR_SYNTAX_ERROR"]
+        
         self.head = self.data [0]
         tunnel: bool = False
         subcmd: list[str] = []
@@ -399,7 +418,7 @@ def main_while():
             try:
                 returns = cmd.execute()
             except IndexError:
-                print(f"{cmd.head}: arguments not enough")
+                print(f"{cmd.head}: arguments not enough. May you can use `{cmd.head} help` for information")
                 continue
             run_injects("after_execute", cmd, returns)
 #endregion

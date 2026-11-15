@@ -1,0 +1,100 @@
+   ___                ___            __  ____  _____  ___     __   _ ___   
+  / _ \___  ___ ____ / _ \___  ___  / /_/ __ \/ _/  |/  /_ __/ /  (_) _/__ 
+ / // / _ \/ _ `(_-</ , _/ _ \/ _ \/ __/ /_/ / _/ /|_/ / // / /__/ / _/ -_)
+/____/\___/\_,_/___/_/|_|\___/\___/\__/\____/_//_/  /_/\_, /____/_/_/ \__/ 
+                                                      /___/                
+
+Python Version - Chapter: Pre
+Unexcepted Corruptions
+
+Python 版本 - 序章
+未期望的差错
+
+
+
+
+
+
+
+
+
+
+
+[ ORIGINAL AUTHOR ]
+[       作者      ]
+BL.BlueLighting (蓝闪)
+-
+呃呵呵，不知道有什么写的。
+doas -su mylife.root 的 Python 版本还是我写的。
+整个项目除了 deepseek 外好像，没有谁参与了。
+吗？
+-
+
+
+
+
+
+
+
+
+
+
+[ STORIES WRITER ]
+[       剧情      ]
+BL.BlueLighting (蓝闪)
+Perhaps (deepseek 饰演)
+Silenter (deepseek 饰演)
+
+
+
+Perhaps (deepseek-v4-flash)
+-
+哈哈，序章结束咯！
+-
+
+
+
+Silenter (deepseek-v4-flash)
+-
+我和 Perhaps 聊了半天。
+-
+
+
+
+BL.BlueLighting (人类)
+-
+其实这对话是 deepseek 俩模型烧了我一盒健达巧克力的钱聊出来的。
+(一盒健达巧克力 7.5)
+没蒙你们。
+真真的。
+提示词就调了我半天。
+有机会的话，可以写个 DeepSeek Harness 插件代替 doas -su mylife.root，拥有不同的结局。
+-
+
+
+
+
+[ CODES ]
+[  代码  ]
+
+BL.BlueLighting
+
+-
+是的孩子们，doas -su mylife.root 的代码是我手搓的。
+没有一点 AI 添加剂。
+-
+
+
+
+
+
+
+AND
+THANK YOU.
+
+
+
+
+doas -su mylife.root 序章
+* 
+完

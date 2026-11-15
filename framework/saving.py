@@ -17,7 +17,7 @@ class Save:
         return self.__repr__()
 
     def __repr__(self):
-        return self.statuses.__str__()
+        return json.dumps(self.statuses)
 
     def __setitem__(self, key, value):
         self.statuses[key] = value
@@ -38,7 +38,7 @@ class Save:
         try:
             return statuses[name]
         except KeyError:
-            raise AttributeError(name) from None
+            return None
 
     def __call__(self, file: str = "", act: str = ""):
         if file != "" and act == "r":

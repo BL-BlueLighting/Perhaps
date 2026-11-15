@@ -1,0 +1,169 @@
+HumanOS version 7.2.14-nature5-5-nature (humanos-zen@nature-mankind) (hcc (HCC) 16.2.1 A.D.6210312, HOS ld (HOS Binutils) 2.47 #1 NATURE SMP PREEMPT_DYNAMIC)
+
+Command line: BOOT_IMAGE=/zygote/DNA/nature-humanos root=PARTNAME=BODY_SYSTEM r loglevel=3 quiet video=EYE-1:32000x18000@1024
+
+x86/Brain: Running old microcode
+xrisc/Brain: Running old microcode
+
+NX (Execute Disable) protection: strict
+APIC: Static calls initialized
+
+efi: BEFI v2.3.1 by God Megatrends
+efi: ACPI=0xda95993 ACPI 2.0=0xda95993 SMBIOS=0xf04c0 INITRD=0xcabcabca
+
+DMI: SM/HMBIOS 2.8 present.
+DMI: Terabyte Technology God., Ltd. H81M-D2/H81M-D2, BIOS F2 08/10/A.D.623
+
+Secure thinking disabled
+RAMDISK: [mem 0xc3734000-0xc4b86fff]
+total RAM covered: 16110M
+
+Run /init as init process
+    with arguments:
+        /init
+    with environment:
+        HOME=/
+        TERM=linux
+
+:: HumanOS Daemon (manstemd) v698.6-1-huos
+:: Loading...
+manstemd[1]: Successfuly made /usr/ read-only.
+manstemd[1]: manstemd 698.6-1-huos running in system mode (+PAM +AUDIT -SEHUMAN +BRARMOR -IMA +IPE +SMACK +SECCOMP +HOSUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 +KMOD +LIBCRYPTSETUP +LIBCRYPTSETUP_PLUGINS +LIBFDISK +PCRE2 +PWQUALITY +P11KIT +QRENCODE +TPM2 +BZIP2 +LZ4 +XZ +ZLIB +ZSTD +BPF_FRAMEWORK +BTF +XKBCOMMON +UTMP +LIBARCHIVE)
+manstemd[1]: Detected architecture x86-64.
+manstemd[1]: Running in initrd.
+manstemd[1]: Initializing machine ID from random generator.
+manstemd[1]: Queued start job for default target Initrd Default Target.
+manstemd[1]: Expecting device /dev/disk/by-uuid/00000000-0000-0000-0000-000000000000...
+manstemd[1]: Reached target Path Units.
+manstemd[1]: Reached target Slice Units.
+manstemd[1]: Reached target Swaps.
+manstemd[1]: Reached target Timer Units.
+manstemd[1]: Listening on Journal Socket (/dev/log).
+manstemd[1]: Listening on Journal Sockets.
+manstemd[1]: TPM PCR Measurements skipped, unmet condition check ConditionSecurity=measured-humanos
+manstemd[1]: Listening on udev Kernel Socket.
+manstemd[1]: Listening on udev Varlink socket.
+manstemd[1]: Reached target Socket Units.
+manstemd[1]: bpf-restrict-fs: LSM BPF program attached
+zram: Added device: zram0
+manstemd[1]: initrd-switch-root.service: Deactivated successfully.
+manstemd[1]: Stopped Switch Root.
+manstemd[1]: systemd-journald.service: Scheduled restart job, restart counter is at 1.
+manstemd[1]: Created slice Slice /system/dirmngr.
+manstemd[1]: Created slice Slice /system/getty.
+manstemd[1]: Created slice Slice /system/gpg-agent.
+manstemd[1]: Created slice Slice /system/gpg-agent-browser.
+manstemd[1]: Created slice Slice /system/gpg-agent-extra.
+manstemd[1]: Created slice Slice /system/gpg-agent-ssh.
+manstemd[1]: Created slice Slice /system/keyboxd.
+manstemd[1]: Created slice Slice /system/modprobe.
+manstemd[1]: Created slice Slice /system/systemd-fsck.
+manstemd[1]: Created slice Slice /system/systemd-zram-setup.
+manstemd[1]: Created slice User and Session Slice.
+manstemd[1]: Started Forward Password Requests to Wall Directory Watch.
+manstemd[1]: Set up automount Arbitrary Executable File Formats File System Automount Point.
+manstemd[1]: Expecting device /dev/disk/by-uuid/8BE0-2967...
+manstemd[1]: Expecting device /dev/disk/by-uuid/bb99062d-393e-4105-8f68-bfeffc8fbc19...
+manstemd[1]: Expecting device /dev/zram0...
+manstemd[1]: Reached target Local dm-clone Devices.
+manstemd[1]: Reached target Login Prompts.
+manstemd[1]: Reached target Image Downloads.
+manstemd[1]: Stopped target Switch Root.
+manstemd[1]: Stopped target Initrd File Systems.
+manstemd[1]: Stopped target Initrd Root File System.
+manstemd[1]: Reached target Local Integrity Protected Volumes.
+manstemd[1]: Reached target Remote File Systems.
+manstemd[1]: Reached target Slice Units.
+manstemd[1]: Reached target Local Verity Protected Volumes.
+manstemd[1]: Listening on Device-mapper event daemon FIFOs.
+manstemd[1]: Listening on Query the User Interactively for a Password.
+manstemd[1]: Listening on Process Core Dump Socket.
+manstemd[1]: Listening on Credential Encryption/Decryption.
+manstemd[1]: Listening on Disk Encryption Enrollment Service Socket.
+manstemd[1]: Listening on Factory Reset Management.
+manstemd[1]: Listening on Hostname Service Socket.
+manstemd[1]: Listening on Console Output Muting Service Socket.
+manstemd[1]: TPM PCR Measurements skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: Make TPM PCR Policy skipped, unmet condition check ConditionSecurity=measured-uki
+manstemd[1]: Listening on Disk Repartitioning Service Socket.
+manstemd[1]: Listening on Simple Block Device Backed Storage Provider.
+manstemd[1]: Listening on Simple File System Backed Storage Provider.
+manstemd[1]: Listening on System Install Tool.
+manstemd[1]: Listening on System Updates.
+manstemd[1]: Listening on udev Varlink Socket.
+manstemd[1]: Listening on User Database Manager Socket.
+manstemd[1]: Mounting Huge Pages File System...
+manstemd[1]: Mounting POSIX Message Queue File System...
+manstemd[1]: Mounting Kernel Debug File System...
+manstemd[1]: Mounting Kernel Trace File System...
+manstemd[1]: Starting Create List of Static Device Nodes...
+manstemd[1]: Load Kernel Module configfs skipped, unmet condition check ConditionKernelModuleLoaded=!configfs
+manstemd[1]: Mounting Kernel Configuration File System...
+manstemd[1]: Load Kernel Module drm skipped, unmet condition check ConditionKernelModuleLoaded=!drm
+manstemd[1]: Load Kernel Module fuse skipped, unmet condition check ConditionKernelModuleLoaded=!fuse
+manstemd[1]: Mounting FUSE Control File System...
+manstemd[1]: systemd-fsck-root.service: Deactivated successfully.
+manstemd[1]: Stopped File System Check on Root Device.
+manstemd[1]: Clear Stale Hibernate Storage Info skipped, unmet condition check ConditionPathExists=/sys/firmware/efi/efivars/HibernateLocation-00000000-0000-0000-0000-000000000000
+manstemd[1]: Starting Journal Service...
+manstemd[1]: Starting Load Kernel Modules...
+manstemd[1]: TPM PCR Machine ID Measurement skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: TPM PCR OS Separator skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: Starting Remount Root and Kernel File Systems...
+manstemd[1]: Early TPM SRK Setup skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: TPM PCR NvPCR Initialization Separator skipped, unmet condition check ConditionPathExists=/etc/initrd-release
+manstemd[1]: TPM NvPCR Product ID Measurement skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: Starting Load udev Rules from Credentials...
+manstemd[1]: Starting Coldplug All udev Devices...
+manstemd[1]: Starting Virtual Console Setup...
+manstemd[1]: Mounted Huge Pages File System.
+manstemd[1]: Mounted POSIX Message Queue File System.
+manstemd[1]: Mounted Kernel Debug File System.
+manstemd[1]: Mounted Kernel Trace File System.
+manstemd[1]: Finished Create List of Static Device Nodes.
+manstemd[1]: Mounted Kernel Configuration File System.
+manstemd[1]: Mounted FUSE Control File System.
+2c_dev: i2c /dev entries driver
+manstemd[1]: Finished Remount Root and Kernel File Systems.
+manstemd[1]: Finished Load udev Rules from Credentials.
+manstemd[1]: Rebuild Hardware Database skipped, unmet condition check ConditionNeedsUpdate=/etc
+manstemd[1]: Starting Load/Save OS Random Seed...
+manstemd[1]: Starting Create Static Device Nodes in /dev gracefully...
+manstemd[1]: TPM SRK Setup skipped, unmet condition check ConditionSecurity=measured-os
+manstemd[1]: Finished Load Kernel Modules.
+manstemd-journald[233]: Collecting audit messages is disabled.
+manstemd[1]: Starting Apply Kernel Variables...
+manstemd[1]: Started Journal Service.
+manstemd[1]: Pulling up more body services...
+manstemd[1]: Pulling up:
+    Eyes \
+    Ears \
+    Memories \
+    Hands \
+    Nervous \
+    Central nervous system \
+    ( .. more 119 services ... )
+
+:: HumanOS Body Tissue Service Components (v706.7-1-hmos) Booting...
+
+:: HumanOS Nervous System Service Components (v803.7-1-hmos) Booting...
+
+nervd: Listening on /nervous/link \
+    /nervous/connect \
+    /nervous/heart \
+    /nervous/action \
+    /nervous/mesg
+
+:: HumanOS Memory Storager Service Components (v804.7-1-hmos) Booting...
+
+memd: Listening on /memories/read \
+    /memories/write \
+    /memories/perm \
+
+:: HumanOS Vision Controlling Service Components (v804.7-1-hmos) Booting...
+
+[ SUCCESS ] Vision system resumed.
+
+manstemd[1]: All system initialized. 
+
+Welcome to World!

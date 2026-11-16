@@ -28,8 +28,12 @@ from climenu import CliMenu
 
 chapters = {
     "pre": {
-        "Name": "序章 - 意外而来",
+        "Name": "序章 - Unexcepted Corruptions: 未知差错",
         "Description": "你从昏迷中醒来，发现自己处于 Emergency Mode (应急恢复模式，又称 CLI Mode)，与 manAI 一起拯救你自己。"
+    },
+    "first": {
+        "Name": "第一章 - Repent, then Recreate: 回头，然后重建",
+        "Description": "<懒得写>"
     }
 }
 

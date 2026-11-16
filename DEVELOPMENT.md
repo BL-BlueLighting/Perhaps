@@ -101,9 +101,22 @@ def _(args: Arguments):
 
 ### 会话与账号
 
-- `setup()` 会把 `scrypt` 密码哈希、随机盐、用户名、主机名写入 `flags/userinfo`，并创建 `flags/login_required`。
-- 主循环默认在 `flags/login_required` 存在时调用 `login()` 要求密码；老存档没有该 flag 时保持直接进入。
-- 需要密码/锁定检查的剧情命令可以使用 `fastutil.passwd_checker(userinfo, fs)`；锁定记录在虚拟文件系统 `/etc/faillocks/faillock`。
+- `setup()` 会把 `scrypt` 密码哈希、随机盐、用户名、主机名写入 `flags/userinfo`，创建 `flags/login_required`，然后提示重启并退出进程；首次启动必须重新运行游戏。
+- `read_userinfo()` 是纯读取函数，不会触发 setup；`init()`、`main_while()` 和 `InitBaseFileSystem()` 会先调用 `ensure_initialized()`，缺账号时自动进入 setup。
+- 主循环在 `flags/login_required` 存在时调用 `base.askpass()` 要求密码；老存档没有该 flag 时保持直接进入。
+- `base.askpass(userinfo=None, requirer="sudo", attempts=3, prompt=None)` 是底层密码询问/校验函数，`base.login` 是它的别名。
+- `fastutil.login(userinfo=None, ifs=None, requirer="sudo", max_attempts=5, prompt=None, lock_duration=60)` 是完整登录后端，传入 `ifs` 时使用虚拟文件系统 `/etc/faillocks/faillock` 做锁定；`fastutil.askpass(userinfo=None, ifs=None)` 是省略参数的简化包装；`fastutil.passwd_checker` 是 `login` 的兼容别名。
+- 登录提示不再包含多余的 `f` 前缀；`requirer=""` / `requirer="[No Requirer]"` 输出 `<username>'s password: `。
+
+### manAI 返回值
+
+`aiReg` 注册的回调返回：
+
+- `None`：什么都不做；
+- `str`：视为新的 `storyWhere`，推进剧情；
+- `[storyWhere, text]`：推进到 `storyWhere` 并显示一行 `! text !`。
+
+其它类型会抛 `TypeError`。
 
 ### 存档 / 虚拟文件系统
 

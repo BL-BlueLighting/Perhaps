@@ -14,6 +14,7 @@ import os
 from typing import Any
 
 from Perhaps.base import *
+from Perhaps.base import ask_password_once as _base_ask_password_once
 from Perhaps.fileutil import *
 from Perhaps.fileutil import PermEnum, CreateFile, CreateDirectory, WriteFile
 from Perhaps.saving import *
@@ -403,28 +404,72 @@ def _add_lock(
         )
 
 
-def passwd_checker(
-    userinfo: list[str] | tuple[str, ...],
-    ifs: FileSystem,
-    requirer: str = "sudo",
+def login(
+    userinfo: list[str] | tuple[str, ...] | None = None,
+    ifs: FileSystem | None = None,
+    requirer: str | None = "sudo",
     max_attempts: int = 5,
+    prompt: str | Callable[[str], str] | None = None,
+    lock_duration: int = 60,
 ) -> bool:
-    """Verify the password for *userinfo* and update the lockout record."""
-    if passwd_faillock(userinfo, ifs):
-        print(f"{requirer}: account is locked, please wait.")
+    """Full-featured login backend.
+
+    This is the configurable counterpart of :func:`askpass` (similar to how
+    ``FileSystem.AddFile`` is the explicit counterpart of ``CreateFile``).
+    It optionally applies the virtual file system's faillock record.
+
+    :param userinfo: ``(username, password_hash, hostname, salt)``; read from
+        ``flags/userinfo`` when omitted.
+    :param ifs: virtual file system used for the lockout record.  ``None``
+        disables lockout storage.
+    :param requirer: prefix used in prompts/messages, e.g. ``"sudo"``.
+    :param max_attempts: attempts before writing a lockout record.
+    :param prompt: custom prompt string or callable ``username -> str``.
+    :param lock_duration: lockout duration in seconds.
+    """
+    if userinfo is None:
+        userinfo = tuple(userinfo_get())
+    if len(userinfo) < 4:
+        raise ValueError("userinfo must contain username, hash, hostname and salt")
+    if ifs is not None and passwd_faillock(userinfo, ifs):
+        print(f"{requirer or ''}: account is locked, please wait.")
         return False
+
+    prefix = f"{requirer}: " if requirer and requirer != "[No Requirer]" else ""
+    password_hash = userinfo[1]
+    salt = userinfo[3]
     for _ in range(max(1, max_attempts)):
-        try:
-            pwd = getpass.getpass(f"{requirer}: f{userinfo[0]} 's password: ")
-        except (KeyboardInterrupt, EOFError):
-            print()
+        password = _base_ask_password_once(
+            tuple(userinfo),
+            requirer=requirer,
+            prompt=prompt,
+        )
+        if password is None:
+            # Ctrl-C / EOF is a cancellation, not a failed attempt.
             return False
-        if verify_password(pwd, userinfo[1], userinfo[3]):
+        if verify_password(password, password_hash, salt):
             return True
-        print(f"{requirer}: incorrect password.")
-    _add_lock(userinfo, ifs, requirer)
-    print(f"{requirer}: too many incorrect password attempts; locked for 60 seconds.")
+        print(f"{prefix}incorrect password. please try again.")
+
+    if ifs is not None:
+        _add_lock(userinfo, ifs, requirer or "sudo", duration=lock_duration)
+        print(
+            f"{prefix}too many incorrect password attempts; "
+            f"locked for {lock_duration} seconds."
+        )
     return False
+
+
+def askpass(
+    userinfo: list[str] | tuple[str, ...] | None = None,
+    ifs: FileSystem | None = None,
+) -> bool:
+    """Simplified login: default requirer/attempts/prompt, optional lockout."""
+    return login(userinfo=userinfo, ifs=ifs)
+
+
+#: Backwards-compatible alias for the old ``passwd_checker`` name.
+passwd_checker = login
 
 
 # endregion

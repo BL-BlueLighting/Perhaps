@@ -219,11 +219,15 @@ def rdflag(flag_name: str) -> str:
 
 
 def read_userinfo() -> tuple[str, str, str, str]:
-    """Read ``flags/userinfo`` as ``(username, password_hash, hostname, salt)``."""
+    """Read ``flags/userinfo`` as ``(username, password_hash, hostname, salt)``.
+
+    This is intentionally a low-level reader: it does not start setup.  Call
+    :func:`ensure_initialized` (or :func:`init` / :func:`main_while`) first.
+    """
     path = os.path.join("flags", "userinfo")
     if not os.path.isfile(path):
-        raise FileNotFoundError(
-            "flags/userinfo does not exist; run the setup first or provide it"
+        raise RuntimeError(
+            "flags/userinfo does not exist; the system is not initialized"
         )
     with open(path, "r", encoding="utf-8") as fh:
         lines = [line.rstrip("\n") for line in fh]
@@ -235,6 +239,26 @@ def read_userinfo() -> tuple[str, str, str, str]:
             "username, password hash, hostname, salt"
         )
     return tuple(line.strip() for line in lines)  # type: ignore[return-value]
+
+
+def is_initialized() -> bool:
+    """Has setup completed and left a readable ``flags/userinfo``?"""
+    return flags("setuped") and os.path.isfile(os.path.join("flags", "userinfo"))
+
+
+def ensure_initialized() -> None:
+    """Run setup when needed.  Setup exits the process for a restart."""
+    if is_initialized():
+        return
+    if flags("skipsetup"):
+        raise RuntimeError(
+            "skipsetup is set but the system has no account; "
+            "run setup() manually or remove the flag"
+        )
+    print("[yellow]System is not initialized. Starting setup...[/yellow]")
+    setup()
+    if not is_initialized():
+        raise RuntimeError("setup did not complete; please restart")
 
 
 # endregion
@@ -526,31 +550,73 @@ class Command:
 # endregion
 
 # region Shared progress / auth helpers
-def login(
+def ask_password_once(
     userinfo: tuple[str, str, str, str] | None = None,
-    requirer: str = "doas",
-    attempts: int = 3,
-) -> bool:
-    """Ask for the account password and verify it.
+    requirer: str | None = "sudo",
+    prompt: str | Callable[[str], str] | None = None,
+) -> str | None:
+    """Prompt for a password once.
 
-    Returns ``False`` on wrong password, interrupt or EOF.  Lockout is
-    handled by :func:`Perhaps.fastutil.passwd_checker` for callers that have
-    a virtual file system to store lock records in.
+    :return: the typed password, or ``None`` on interrupt/EOF.
     """
     if userinfo is None:
         userinfo = read_userinfo()
-    username, password_hash, _, salt = userinfo
+    username = userinfo[0]
+    if prompt is None:
+        if requirer and requirer != "[No Requirer]":
+            text = f"{requirer}: {username}'s password: "
+        else:
+            text = f"{username}'s password: "
+    elif callable(prompt):
+        text = prompt(username)
+    else:
+        text = str(prompt)
+    try:
+        return getpass.getpass(text)
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return None
+
+
+def askpass(
+    userinfo: tuple[str, str, str, str] | None = None,
+    requirer: str | None = "sudo",
+    attempts: int = 3,
+    prompt: str | Callable[[str], str] | None = None,
+) -> bool:
+    """Low-level password prompt/verify helper.
+
+    :param userinfo: ``(username, password_hash, hostname, salt)``; read from
+        ``flags/userinfo`` when omitted.
+    :param requirer: prefix shown before the password prompt.  ``None`` or
+        ``"[No Requirer]"`` shows only ``<username>'s password: ``.
+    :param attempts: maximum number of tries.
+    :param prompt: custom prompt string, or callable taking the username.
+    :return: ``True`` on success, ``False`` on wrong password/interrupt/EOF.
+
+    ``fastutil.login`` is the full-featured backend (adds lockout when a
+    virtual file system is available); ``fastutil.askpass`` is its simplified
+    wrapper.  For compatibility, ``login`` is also an alias of this function
+    in ``Perhaps.base``.
+    """
+    if userinfo is None:
+        userinfo = read_userinfo()
+    password_hash = userinfo[1]
+    salt = userinfo[3]
+    prefix = f"{requirer}: " if requirer and requirer != "[No Requirer]" else ""
     for _ in range(max(1, attempts)):
-        try:
-            password = getpass.getpass(f"{requirer}: f{username} 's password: ")
-        except (KeyboardInterrupt, EOFError):
-            print()
+        password = ask_password_once(userinfo, requirer=requirer, prompt=prompt)
+        if password is None:
             return False
         if verify_password(password, password_hash, salt):
             return True
-        print(f"{requirer}: incorrect password. please try again.")
-    print(f"{requirer}: too many incorrect password attempts.")
+        print(f"{prefix}incorrect password. please try again.")
+    print(f"{prefix}too many incorrect password attempts.")
     return False
+
+
+#: Low-level alias; full-featured login lives in ``Perhaps.fastutil``.
+login = askpass
 
 
 # endregion
@@ -611,8 +677,10 @@ def setup() -> None:
         sleep(2)
         print("\n🎉 All configuration completed!")
         print("- File writed.")
-        print("- Discover more things in HumanOS.")
+        print("- Please restart to apply.")
         print()
+        console.input("[dim]Enter to continue[/dim]> ")
+        raise SystemExit(0)
 
     clear()
     print("\n[green]Welcome to HumanOS![/green]")
@@ -675,8 +743,7 @@ def init() -> None:
     print("Type 'help' for all commands.")
     print()
 
-    if not flags("skipsetup") and not flags("setuped"):
-        setup()
+    ensure_initialized()
 
 
 # endregion
@@ -690,10 +757,12 @@ def main_while(auth: bool | None = None) -> bool:
     :return: ``True`` when the session ended normally, ``False`` on auth
         failure.
     """
+    if not is_initialized():
+        ensure_initialized()
     username, password_hash, hostname, salt = read_userinfo()
     if auth is None:
         auth = flags("login_required")
-    if auth and not login((username, password_hash, hostname, salt)):
+    if auth and not askpass((username, password_hash, hostname, salt)):
         print("Access denied.")
         return False
 

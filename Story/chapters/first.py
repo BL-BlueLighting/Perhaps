@@ -11,6 +11,9 @@ from Perhaps.fastcmdutil import *
 from Perhaps.fileutil import *
 from Perhaps.manAI import *
 
+if not flags("defaultslot"):
+    svslot(1)
+
 fs = FileSystem({}, [])
 
 def MakeFilesAndDirectories():
@@ -71,7 +74,10 @@ def MakeFilesAndDirectories():
         "sock.mainloop.start()",
         "sock.start()",
         "print('manAI service started.')"
-    ])
+    ],  file_parent="/home/perhaps/models/trainingDatas/",
+        file_owner="Perhaps",
+        file_permission=[PermEnum.Listable, PermEnum.Runnable, PermEnum.Readable])
+
     #endregion
 
     #region Stories

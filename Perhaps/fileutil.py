@@ -304,6 +304,12 @@ class ProtectedList(list):
         return rstr
 
 
+def _home_dir() -> str:
+    """Current user's virtual home directory (falls back to ``/home``)."""
+    username = rdflag("userinfo").split("\n")[0].strip()
+    return f"/home/{username}" if username else "/home"
+
+
 class FileSystemPath(pathlib.PurePosixPath):
     def __init__(self, *args: str | os.PathLike[str]):
         parts: list[str] = []
@@ -314,9 +320,9 @@ class FileSystemPath(pathlib.PurePosixPath):
             parts.append(value)
         value = posixpath.join(*parts) if parts else "."
         if value == "~":
-            value = "/home"
+            value = _home_dir()
         elif value.startswith("~/"):
-            value = "/home" + value[1:]
+            value = _home_dir() + value[1:]
         super().__init__(posixpath.normpath(value))
 
 
@@ -687,6 +693,7 @@ def _cwd() -> str:
 def InitBaseFileSystem() -> FileSystem:
     """Create the standard HumanOS directory tree and return the global FS."""
     global fs
+    ensure_initialized()
     file_system = reset_filesystem()
     username, _password_hash, hostname, _salt = read_userinfo()
     if (
@@ -847,6 +854,11 @@ def InitBaseFileSystem() -> FileSystem:
     )
     return file_system
 
+def prompt_patch(prompt: str, userinfo: tuple[str, str, str, str], dir: str):
+    return (
+        f"\n[green]{escape(userinfo[0])}@{escape(userinfo[2])}[/green]:"
+        f"{escape(dir)}[cyan]$[/cyan] "
+    )
 
 # endregion
 
@@ -856,7 +868,6 @@ def _(directory: str) -> None:
     save.directory = directory
     if not save.gotattr("cdDirectory") or save.cdDirectory is None:
         save.cdDirectory = directory
-
 
 @patcher("directory_patcher")
 def _(directory: str) -> str:

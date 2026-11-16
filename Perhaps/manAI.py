@@ -26,20 +26,21 @@ def manAI(args: Arguments) -> None:
         if result is None:
             continue
         if isinstance(result, str):
-            # Text-only response: do not touch storyWhere.
-            print(f"[dim]! {escape(result)} ![/dim]")
+            # Returning a storyWhere string advances the story.
+            swset(result)
             continue
-        if (
-            isinstance(result, (tuple, list))
-            and len(result) == 2
-            and all(isinstance(item, str) for item in result)
-        ):
+        if isinstance(result, (tuple, list)):
+            if len(result) != 2 or not all(isinstance(item, str) for item in result):
+                raise TypeError(
+                    "manAI talk list must be [storyWhere, text]; "
+                    f"got {result!r}"
+                )
             swset(result[0])
-            print(f"[dim]! {escape(result[1])} ![/dim]")
+            print(f"[dim]! {result[1]} ![/dim]")
             continue
         raise TypeError(
-            "manAI talk callables must return None, a string, or "
-            f"(next_story_where, text); got {result!r}"
+            "manAI talk callables must return None, a storyWhere string, "
+            f"or [storyWhere, text]; got {result!r}"
         )
 
 

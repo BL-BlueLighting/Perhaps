@@ -188,7 +188,7 @@ def swset(sw: str):
     """Set storyWhere value."""
     save.storyWhere = sw
 
-def aprint(string: str, delay: float = 0.1):
+def aprint(string: str, delay: float = 0.4):
     """manAI print, or slow print."""
     print(string)
     sleep(delay)

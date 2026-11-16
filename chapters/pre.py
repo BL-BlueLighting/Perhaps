@@ -208,7 +208,7 @@ def manAI(args: Arguments):
         swset("1007")
         saveitp()
     else:
-        aprint("(qwq) 不要不舍了！走吧！")
+        aprint("(qwq) 走吧，至少晚上 We can see again~")
         aprint("! 提示：执行 restart !")
 
 @register("perhaps")

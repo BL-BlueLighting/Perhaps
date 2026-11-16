@@ -19,6 +19,7 @@ class PermEnum(Enum):
     Access_Denied = 3
     Unlistable = 4
     Unwritable = 5
+    Runnable = 6
 #endregion
 
 #region Consts
@@ -90,6 +91,16 @@ class AttributeList(list):
         rstr += ")"
         return rstr
 
+    def __contains__(self, item: str | FileAttribute) -> bool:
+        for attr in list.__iter__(self):
+            if type(item) == str:
+                if attr.attrname == item:
+                    return True
+            if type(item) == FileAttribute:
+                if attr == item:
+                    return True
+        return False
+
 class FileInformation:
     def __init__(self, fileName: str, fileAttributes: AttributeList):
         self.fileName = fileName
@@ -137,7 +148,7 @@ class ProtectedList(list):
     def __iter__(self):
         def visible(file: FileInformation) -> bool:
             permissions = file.fileAttributes["Permission"]
-            return PermEnum.Access_Denied not in permissions and PermEnum.Unlistable not in permissions
+            return ((PermEnum.Access_Denied not in permissions) and (PermEnum.Unlistable not in permissions)) or (PermEnum.Listable in permissions)
 
         return iter([file for file in list.__iter__(self) if visible(file)])
 
@@ -195,7 +206,12 @@ class FileSystem:
         self.files[parentDirectoryPath].append(fileInformation)
         return self.files[parentDirectoryPath].index(fileInformation)
 
-    def AddDirectory(self, directoryPath: str, permissions: Sequence[PermEnum] | None = None) -> int:
+    def AddDirectory(self,
+                     directoryPath: str,
+                     permissions: Sequence[PermEnum] | None = None,
+                     owner: Sequence[str] | None = None,
+                     time: Sequence[str] | None = None
+        ) -> int:
         """
         Add new empty directory into FileSystem's directory list.
 
@@ -210,6 +226,10 @@ class FileSystem:
 
         if permissions is None:
             permissions = [PermEnum.Listable, PermEnum.Readable, PermEnum.Writable]
+        if owner is None:
+            owner = ["System"]
+        if time is None:
+            time = [datetime.datetime.now().__str__()]
 
         if directoryPath == "/":
             self.directories.append(directoryPath)
@@ -225,8 +245,8 @@ class FileSystem:
             AttributeList(
                 [
                     FileAttribute("Permission", [list(permissions)]),
-                    FileAttribute("Time", [datetime.datetime.now().__str__()]),
-                    FileAttribute("Owner", ["System"]),
+                    FileAttribute("Time", time),
+                    FileAttribute("Owner", owner),
                     FileAttribute("Contents", ["<DIRECTORY>"]),
                     FileAttribute("Directory", ["yes"])
                 ]
@@ -544,12 +564,22 @@ def _join_path(base: str | None, path: str) -> str:
 
 @inject("getdir")
 def _(args: str):
+    try:
+        tmp = save.directory
+    except:
+        return "~"
+
     save.directory = args
     if save.cdDirectory is None:
         save.cdDirectory = args
 
 @inject("directory_patcher")
 def _(args: str):
+    try:
+        tmp = save.cdDirectory
+    except:
+        return "~"
+
     if save.cdDirectory is None:
         return args
     return save.cdDirectory
@@ -566,7 +596,14 @@ def _ls(args: Arguments):
     try:
         files_in_dir = fs.ListDirectory(str(path))
         for file_info in files_in_dir:
-            print(file_info.fileName)
+            fileColor = "white"
+            if "Directory" in file_info.fileAttributes:
+                fileColor = "blue"
+            if PermEnum.Access_Denied in file_info.fileAttributes["Permission"]:
+                fileColor = "red"
+            if PermEnum.Runnable in file_info.fileAttributes["Permission"] and fileColor != "blue":
+                fileColor = "green" # bro you make a directory runnable is hyw?
+            print(f"[{fileColor}]{file_info.fileName}[/{fileColor}]")
     except DirectoryNotExists:
         print(f"ls: cannot access '{path}': No such directory")
     except AccessDenied:
@@ -654,6 +691,41 @@ def CreateFile(
         )
     )
     return fs.AddFile(file_parent, fileinfo)
+
+def CreateDirectory(
+        directory_name: str,
+        directory_parent: str,
+        full_path: str = "",
+        permissions: Sequence[PermEnum] | None = None,
+        date: Sequence[str] | None = None,
+        owner: Sequence[str] | None = None,
+):
+    """
+    Create new Directory.
+
+    :param directory_name: Directory's name.
+    :param directory_parent: Directory's parent.
+    :param full_path: If you enter this argument, name and parent will be automatic
+    get name and parent, you can do not write 2 args above.
+    :param permissions: Directory permissions. PermEnum plz.
+    :param date: String date.
+    :param owner: String owner.
+    """
+    if permissions is None:
+        permissions = [PermEnum.Writable, PermEnum.Readable, PermEnum.Listable]
+    if date is None:
+        date = [datetime.datetime.now().__str__()]
+    if owner is None:
+        owner = ["System"]
+
+    if not full_path is None:
+        # analyze name and parent from full path.
+        p = FileSystemPath(full_path)
+        directory_name = p.name
+        directory_parent = p.parent
+
+    fs.AddDirectory(_join_path(directory_name, directory_parent), permissions)
+
 
 CreateFile("humansh", file_content=["<BINARY>"], file_owner=["root"], file_parent="/bin")
 CreateFile("hostname", file_content=["humanos"], file_owner=["root"], file_parent="/etc")

@@ -17,6 +17,16 @@
 
 正在逐步迁移剧情，重置剧情等。
 
+## 运行
+
+```bash
+# 在仓库根目录
+pip install -r requirements.txt
+python -m Story
+```
+
+`Story/__main__.py` 会自动切换到 `Story/` 目录并补齐 `sys.path`；菜单需要真实 TTY（终端交互）。
+
 ## 技术架构 / Technology Arch.
 
 doas -su mylife.root 基于 Python 和 Perhaps Framework.

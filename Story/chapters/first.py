@@ -82,8 +82,13 @@ def MakeFilesAndDirectories():
     fs_writesave(fs)
     saveit()
     #endregion
+    return fs
 
-fs_initialize(fs)
+
+if save.gotattr("fileSystem"):
+    fs = fs_initialize(fs)
+else:
+    fs = MakeFilesAndDirectories()
 
 @aiReg("1000")
 def _ ():

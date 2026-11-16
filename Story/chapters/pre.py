@@ -9,20 +9,23 @@ Enjoy! :-)
 from Perhaps import *
 
 #region Injects
-@inject("prompt_patcher")
+@patcher("prompt_patcher")
 def prompt_patch(prompt: str, userinfo: tuple[str, str, str, str], dir: str):
-    return f"\n[green]{userinfo[0]}@{userinfo[2]}[/green]:{dir}[cyan]$[/cyan] "
+    return (
+        f"\n[green]{escape(userinfo[0])}@{escape(userinfo[2])}[/green]:"
+        f"{escape(dir)}[cyan]$[/cyan] "
+    )
 #endregion
 
 #region Registers
-@register("ls")
+@register("ls", override=True)
 def ls(args: Arguments):
     sw = swget()
 
     if sw == "1000":
         print("README.txt")
 
-@register("cat")
+@register("cat", override=True)
 def cat(args: Arguments):
     sw = swget()
     file = args[0]
@@ -64,7 +67,7 @@ def systemutil(args: Arguments):
 
 
 
-@register("manAI")
+@register("manAI", override=True)
 def manAI(args: Arguments):
     sw = swget()
     if int(sw) < 1002:
@@ -213,36 +216,51 @@ def manAI(args: Arguments):
 
 @register("perhaps")
 def perhapsAlias(args: Arguments):
-    if save.PerhapsAlias:
+    if save.get("PerhapsAlias", False):
         manAI(args)
     else:
         return COMMAND_NOT_FOUND
 
 @register("alias")
 def alias(args: Arguments):
-    if not save.EnableAlias:
+    if not save.get("EnableAlias", False):
         return COMMAND_NOT_FOUND
 
-    act: str = args[0].__str__()
+    if len(args) == 0:
+        print("alias: missing operand")
+        return
+    act = str(args[0])
     if act == "help":
         print("alias Command")
         print("    - alias <new alias name>=<source commands>")
         print("    - Cancel alias: alias <exists alias name>=")
         return
-    else:
-        aliaspair = act.split("=")
-        if len(aliaspair) < 1 or aliaspair[1] == "":
-            # cancel alias
-            registry.pop(aliaspair[0])
-            if aliaspair[0] == "perhaps":
-                mkachieve("表面一套，背后一套", "你欺骗 manAI 的感情😡！", "liar")
+    if "=" not in act:
+        print("alias: expected <name>=<command>")
+        return
+    name, _, source = act.partition("=")
+    name = name.strip()
+    source = source.strip()
+    if not name:
+        print("alias: empty alias name")
+        return
+    if source == "":
+        registry.pop(name, None)
+        if name == "perhaps":
+            mkachieve("表面一套，背后一套", "你欺骗 manAI 的感情😡！", "liar")
+        print("alias: alias removed")
+        return
 
-        @register(aliaspair[0])
-        def _(args: Arguments):
-            cmd = Command(aliaspair[1])
-            cmd.parse()
-            cmd.execute()
-        print("alias: alias created successfully.")
+    @register(name, override=True)
+    def _(args: Arguments):
+        cmd = Command(source)
+        cmd.parse()
+        if cmd.parse_error is not None:
+            print(escape(cmd.parse_error))
+            return
+        cmd.execute()
+
+    print("alias: alias created successfully.")
 
 @register("restart")
 def restart(args: Arguments):
@@ -252,10 +270,11 @@ def restart(args: Arguments):
 
     print("restart: Restarting...")
     print("")
-    initpre = open("./texts/initpre_fixed.txt", "r").readlines()
+    with open("./texts/initpre_fixed.txt", "r", encoding="utf-8") as fh:
+        initpre = fh.readlines()
 
     for line in initpre:
-        rich.print(f"[green]{line.strip()}[/green]", flush=True)
+        rich.print(f"[green]{escape(line.strip())}[/green]", flush=True)
         sleep(0.04)
 
     saveitp()
@@ -265,12 +284,13 @@ def restart(args: Arguments):
 
     try:
         console.input("> [dim]Enter 显示演出人员表，Ctrl+C 跳过。[/dim]")
-    except KeyboardInterrupt or EOFError:
+    except (KeyboardInterrupt, EOFError):
         exit()
 
     # 演出人员表
     mt = MemberTable()
-    mt.scroll(open("./texts/chapter_pre_end.txt", "r").read())
+    with open("./texts/chapter_pre_end.txt", "r", encoding="utf-8") as fh:
+        mt.scroll(fh.read())
 
     print("You can log out now.")
     

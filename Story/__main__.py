@@ -5,10 +5,21 @@ Menu File
 
 import os
 import runpy
+import sys
 
 import rich.console
 from builtins import print as rprint
 from rich import print as iprint
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+REPOSITORY_ROOT = os.path.dirname(BASE_DIR)
+
+# The framework and the story both use paths relative to the Story directory
+# (``flags/``, ``texts/``), so make the launch location deterministic and make
+# ``import Perhaps`` work no matter where the game was started from.
+os.chdir(BASE_DIR)
+if REPOSITORY_ROOT not in sys.path:
+    sys.path.insert(0, REPOSITORY_ROOT)
 
 # EasyCliMenu 库开发者出来挨打！
 # 示例和文档写的不一样！
@@ -22,13 +33,12 @@ chapters = {
     }
 }
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 console = rich.console.Console()
 console.clear()
 print = console.print
 
-LOGO = open("texts/logo.txt", "r").read()
+with open(os.path.join(BASE_DIR, "texts", "logo.txt"), "r", encoding="utf-8") as fh:
+    LOGO = fh.read()
 
 print("[white]" + LOGO + "[/white]", justify="center")
 print()
@@ -61,10 +71,10 @@ def choose_chapter() -> str | None:
 
     if choice is None or choice == len(items):
         return None
-    return items[choice][0] #type: ignore
+    return items[choice][0]  # type: ignore[index]
 
 
-def run_chapter(chapter_key: str):
+def run_chapter(chapter_key: str) -> None:
     """
     执行 `chapters/<chapter_key>.py`，执行完毕后返回主菜单。
     """
@@ -93,7 +103,7 @@ def run_chapter(chapter_key: str):
     exit()
 
 
-def main():
+def main() -> None:
     """菜单主循环。"""
     while True:
         chapter_key = choose_chapter()
@@ -110,4 +120,3 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, EOFError):
         console.clear()
         print("\n正在退出游戏 ...")
-

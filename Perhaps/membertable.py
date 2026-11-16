@@ -1,88 +1,127 @@
 """
 doas -su mylife.root
-演出人员表
+演出人员表 (credits scroller)
 
-写这玩意花了我很长时间。
-do not copy~
+The old implementation measured every character as one or two columns.  That
+is wrong for combining marks, ZWJ emoji, variation selectors and tabs; use
+``wcwidth`` when it is available (it is a dependency of ``rich`` anyway).
 """
 
+from __future__ import annotations
+
+import shutil
 import sys
 import time
-import shutil
 import unicodedata
 
+try:
+    from wcwidth import wcwidth as _wcwidth
+    from wcwidth import wcswidth as _wcswidth
+except ImportError:  # pragma: no cover - fallback for minimal environments
+    def _wcwidth(char: str) -> int:
+        if unicodedata.combining(char):
+            return 0
+        return 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+
+    def _wcswidth(text: str) -> int:
+        return sum(_wcwidth(char) for char in text)
+
+
 class MemberTable:
-    def wlen(self, s: str) -> int:
-        return sum(2 if unicodedata.east_asian_width(c) in ('W', 'F') else 1 for c in s)
+    @staticmethod
+    def wlen(s: str) -> int:
+        """Terminal display width of *s* (tabs expanded to 4 columns)."""
+        expanded = s.expandtabs(4)
+        width = _wcswidth(expanded)
+        if width >= 0:
+            return width
+        return sum(max(0, _wcwidth(char)) for char in expanded)
 
-
-    def wrap_line(self, s: str, width: int):
+    @classmethod
+    def wrap_line(cls, s: str, width: int) -> list[str]:
+        if width <= 0:
+            raise ValueError("wrap width must be positive")
         if not s:
-            return ['']
-        out, cur, cur_w = [], '', 0
-        for ch in s:
-            cw = 2 if unicodedata.east_asian_width(ch) in ('W', 'F') else 1
-            if cur_w + cw > width:
-                out.append(cur)
-                cur, cur_w = ch, cw
+            return [""]
+        out: list[str] = []
+        current: list[str] = []
+        current_width = 0
+        for char in s.expandtabs(4):
+            char_width = max(0, _wcwidth(char))
+            if char_width == 0:
+                current.append(char)
+                continue
+            if current_width + char_width > width:
+                out.append("".join(current))
+                current = [char]
+                current_width = char_width
             else:
-                cur += ch
-                cur_w += cw
-        out.append(cur)
+                current.append(char)
+                current_width += char_width
+        out.append("".join(current))
         return out
 
+    @classmethod
+    def center(cls, s: str, width: int) -> str:
+        """Pad *s* on both sides to *width* display columns."""
+        space = width - cls.wlen(s)
+        if space <= 0:
+            return s
+        left = space // 2
+        return " " * left + s + " " * (space - left)
 
-    def center(self, s: str, width: int) -> str:
-        space = width - self.wlen(s)
-        return (' ' * (space // 2) + s) if space > 0 else s
-
-
-    def load_lines(self, text: str, width: int):
-        lines = []
+    @classmethod
+    def load_lines(cls, text: str, width: int) -> list[str]:
+        lines: list[str] = []
         for raw in text.splitlines():
-            if self.wlen(raw) <= width:
+            if cls.wlen(raw) <= width:
                 lines.append(raw)
             else:
-                lines.extend(self.wrap_line(raw, width))
-        return [self.center(s, width) for s in lines]
+                lines.extend(cls.wrap_line(raw, width))
+        return [cls.center(line, width) for line in lines]
 
-
-    def scroll(self, text: str, duration: float = 60.0, fps: int = 30):
+    @staticmethod
+    def scroll(text: str, duration: float = 60.0, fps: int = 30) -> None:
+        """Scroll *text* upward over *duration* seconds."""
+        if fps <= 0:
+            raise ValueError("fps must be positive")
+        if duration < 0:
+            raise ValueError("duration must not be negative")
         delay = 1.0 / fps
-        sys.stdout.write('\033[?25l\033[2J\033[H')
+        sys.stdout.write("\033[?25l\033[2J\033[H")
         sys.stdout.flush()
 
         try:
-            W, H = shutil.get_terminal_size((80, 24))
-            H = max(H - 1, 1)
-            lines = self.load_lines(text, W)
-            last_W = W
+            width, height = shutil.get_terminal_size((80, 24))
+            height = max(height - 1, 1)
+            lines = MemberTable.load_lines(text, width)
+            last_width = width
 
-            total = H + len(lines)
+            total = height + len(lines)
             total_frames = max(int(duration * fps), 1)
             speed = total / total_frames
-            offset = float(H)
+            offset = float(height)
 
             for _ in range(total_frames + 1):
-                nW, nH = shutil.get_terminal_size((80, 24))
-                nH = max(nH - 1, 1)
-                if nW != last_W:
-                    lines = self.load_lines(text, nW)
-                    last_W = nW
-                W, H = nW, nH
+                new_width, new_height = shutil.get_terminal_size((80, 24))
+                new_height = max(new_height - 1, 1)
+                if new_width != last_width:
+                    lines = MemberTable.load_lines(text, new_width)
+                    last_width = new_width
+                width, height = new_width, new_height
 
-                oi = int(offset)
-                buf = ['\033[H']
-                for y in range(H):
-                    idx = y - oi
-                    if 0 <= idx < len(lines):
-                        buf.append(lines[idx])
-                    if y != H - 1:
-                        buf.append('\033[K\n')
+                integer_offset = int(offset)
+                buffer = ["\033[H"]
+                for y in range(height):
+                    index = y - integer_offset
+                    if 0 <= index < len(lines):
+                        buffer.append(lines[index])
+                    if y != height - 1:
+                        buffer.append("\033[K\n")
                     else:
-                        buf.append('\033[K')
-                buf.append('\033[J')
-                sys.stdout.write(''.join(buf))
+                        buffer.append("\033[K")
+                buffer.append("\033[J")
+                sys.stdout.write("".join(buffer))
                 sys.stdout.flush()
 
                 time.sleep(delay)
@@ -91,5 +130,5 @@ class MemberTable:
         except KeyboardInterrupt:
             pass
         finally:
-            sys.stdout.write('\033[?25h\033[2J\033[H')
+            sys.stdout.write("\033[?25h\033[2J\033[H")
             sys.stdout.flush()

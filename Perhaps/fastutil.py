@@ -2,351 +2,489 @@
 doas -su mylife.root
 Fast baseutils
 
-Base tools of DROM stories.
+Save slots, password verification, achievement helpers and convenience
+wrappers around the virtual file system.
 """
 
+from __future__ import annotations
+
 import datetime
-from Perhaps.base import *  #type: ignore
-from Perhaps.saving import * #type: ignore
+import getpass
+import os
+from typing import Any
+
+from Perhaps.base import *
 from Perhaps.fileutil import *
 from Perhaps.fileutil import PermEnum, CreateFile, CreateDirectory, WriteFile
-from typing import Any
-import getpass
+from Perhaps.saving import *
 
-#region Functions / Variables
-save = Save()
 slot: int = 0
-enableFastutilRegisters = True
-"""if not os.path.exists("flags/0"):
-    open("flags/0", "w").write("{}")
-save("flags/0", "r")"""
 
-def isdigit(x: Any):
+
+# region Functions / Variables
+def isdigit(x: Any) -> bool:
     try:
         int(x)
-    except ValueError:
+    except (TypeError, ValueError):
         return False
-    else:
-        return True
+    return True
 
-def askinput(__prompt: str, wants_type: type | None = None, failure_retry: str = "输入格式错误，请重试。", validator: Callable[[str], bool] | None = None) -> str:  #type: ignore
-    """
-    Asking input
 
-    :param __prompt: Input prompt.
-    :param wants_type: Type you want user gives.
-    :param failure_retry: Fail retry string.
-    :param validator: Validating function.
-        It needs a string, this is user's input.
-        Return a bool value, user's value vaild state.
-    :return str: User's input, if user input is not you want type, it will auto retry.
-    """
+def askinput(
+    __prompt: str,
+    wants_type: type | None = None,
+    failure_retry: str = "输入格式错误，请重试。",
+    validator: Callable[[str], bool] | None = None,
+) -> str:
+    """Ask for input and retry until it matches the requested type/validator."""
     while True:
         try:
             ipt = console.input(__prompt)
-            if wants_type == int:
-                if isdigit(ipt):
-                    return ipt
-                else:
-                    print(failure_retry)
-                    continue
-            elif wants_type == bool:
-                bool(ipt)
-            elif not validator is None:
-                if validator(ipt):
-                    return ipt
-                else:
-                    print(failure_retry)
-                    continue
-        except ValueError:
+        except (KeyboardInterrupt, EOFError):
+            print()
+            raise
+        if wants_type is int:
+            try:
+                int(ipt)
+            except ValueError:
+                print(failure_retry)
+                continue
+        elif wants_type is bool:
+            low = ipt.strip().lower()
+            if low in ("y", "yes", "true", "1"):
+                ipt = "True"
+            elif low in ("n", "no", "false", "0"):
+                ipt = "False"
+            else:
+                print(failure_retry)
+                continue
+        elif wants_type is not None and wants_type is not str:
+            raise TypeError(f"unsupported wants_type: {wants_type!r}")
+        if validator is not None and not validator(ipt):
             print(failure_retry)
             continue
-        except KeyboardInterrupt:
-            print(failure_retry)
-            continue
-        else:
-            return ipt
+        return ipt
+
 
 def askyn(__prompt: str = "确定吗？[Y/n]", default: str = "y") -> bool:
-    """
-    Ask user yes or not.
-
-    :param __prompt: Input prompt.
-    :param default: Default value. If user didn't write anything or write non-yes or non-not characters auto fallback.
-    :return bool: Does user agree.
-    """
+    """Ask a yes/no question.  Empty input uses *default*."""
     try:
-        res = console.input(__prompt)
-    except KeyboardInterrupt:
+        res = console.input(__prompt).strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        print()
         return False
-    else:
-        if res.lower() != "y" and res.lower() != "n":
-            return default == "y"
-        return res.lower() == "y"
+    if res == "":
+        return default.strip().lower() == "y"
+    if res in ("y", "yes"):
+        return True
+    if res in ("n", "no"):
+        return False
+    return default.strip().lower() == "y"
 
-def svslot(x: int):
-    """Set save slot"""
+
+def svslot(x: int) -> None:
+    """Set the active save slot."""
     global slot
+    if not isinstance(x, int) or isinstance(x, bool) or x < 0:
+        raise ValueError("save slot must be a non-negative integer")
     slot = x
 
-def svreload():
-    """Load now slot"""
-    save(f"flags/{slot}", "r")
 
-def svsslot():
-    """Saving slot"""
+def _slot_file(x: int | None = None) -> str:
+    return os.path.join("flags", str(slot if x is None else x))
+
+
+def svreload() -> None:
+    """Load the active save slot.  A missing slot starts from an empty save."""
+    try:
+        save.load(_slot_file())
+    except FileNotFoundError:
+        object.__setattr__(save, "statuses", {})
+    except (OSError, ValueError) as exc:
+        print(f":: [yellow]存档无法读取，已从空存档开始：{escape(str(exc))}[/yellow]")
+        object.__setattr__(save, "statuses", {})
+
+
+def _list_slots() -> list[int]:
+    try:
+        entries = os.listdir("flags")
+    except FileNotFoundError:
+        return []
+    slots = []
+    for entry in entries:
+        if entry.isdigit():
+            try:
+                slots.append(int(entry))
+            except ValueError:
+                continue
+    return sorted(slots)
+
+
+def _choose_slot(prompt_text: str, validator: Callable[[str], bool] | None = None) -> int:
+    os.makedirs("flags", exist_ok=True)
+    for entry in _list_slots():
+        print(f"[{entry}] 槽位 {entry}")
+    raw = askinput(prompt_text, int, "请输入正确的槽位数。请重试。", validator)
+    return int(raw)
+
+
+def svsslot() -> bool:
+    """Save the current in-memory state to a slot."""
     clear()
     print("doas -su mylife.root")
     print("保存存档 - Save archive / save")
     print("")
-    for file in os.listdir("./flags"):
-        if isdigit(file):
-            print(f"[{file}] 槽位 {file}")
-    islot = int(askinput("[dim]输入您所需要选择的槽位 >[/dim] ", int, "请输入正确的槽位数。请重试。"))
-
-    if os.path.exists(f"./flags/{islot}"):
-        if askyn(":: 检测到该槽位已有存档，仍要覆盖吗？", "n"):
-            svslot(islot)
-            saveitp()
-            return True
-        else:
+    chosen = _choose_slot("[dim]输入您所需要选择的槽位 >[/dim] ")
+    if os.path.exists(_slot_file(chosen)):
+        if not askyn(":: 检测到该槽位已有存档，仍要覆盖吗？[Y/n]", "n"):
             print(":: 已取消操作。")
             return False
-    else:
-        svslot(islot)
-        saveitp()
-        return True
+    svslot(chosen)
+    saveitp()
+    return True
 
-def svoslot():
-    """Loading slot"""
+
+def svoslot() -> bool:
+    """Load a save slot."""
     clear()
     print("doas -su mylife.root")
     print("加载存档 - Load archive / save")
     print("")
-    for file in os.listdir("./flags"):
-        if isdigit(file):
-            print(f"[{file}] 槽位 {file}")
-    islot = int(askinput("[dim]输入您所需要选择的槽位 >[/dim] ", int, "请输入正确的槽位数。请重试。"))
+    chosen = _choose_slot("[dim]输入您所需要选择的槽位 >[/dim] ")
     print(":: [red]请注意，您加载存档后，目前内存中的存档将被覆盖。[/red]")
-    print("   继续吗？[Y/n]", end="")
-    
-    if askyn("") != "n":
+    if askyn(":: 继续吗？[Y/n] ", "y"):
         print(":: 稍等，正在加载...")
-        svslot(islot)
+        svslot(chosen)
         svreload()
         print(":: 存档加载成功。")
         console.input("[dim]Enter 继续游戏 >[/dim] ")
         return True
-    else:
-        if askyn(":: 是否要保存内存存档到新的槽位中继续？[Y/n]"):
-            if svsslot():
-                print(":: 正在加载槽位...")
-                svslot(islot)
-                svreload()
-                print(":: 存档加载成功。")
-                console.input("[dim]Enter 继续游戏 >[/dim] ")
-                return True
-            else:
-                print(":: 取消保存存档，正在退出...")
-                return False
-        else:
-            print(":: 取消保存存档，正在退出...")
-            return False
+    if askyn(":: 是否要保存内存存档到新的槽位中继续？[Y/n]", "y"):
+        if svsslot():
+            print(":: 正在加载槽位...")
+            svslot(chosen)
+            svreload()
+            print(":: 存档加载成功。")
+            console.input("[dim]Enter 继续游戏 >[/dim] ")
+            return True
+    print(":: 取消保存存档，正在退出...")
+    return False
 
-def svdslot():
+
+def svdslot() -> bool:
+    """Choose the default save slot."""
     clear()
     print("doas -su mylife.root")
     print("选择默认存档 - Select default archive / save")
     print("")
-    for file in os.listdir("./flags"):
-        if isdigit(file):
-            print(f"[{file}] 槽位 {file}")
 
     def validator(s: str) -> bool:
-        return os.path.exists(f"./flags/{s}")
-    
-    islot = int(askinput("[dim]输入您所需要选择的槽位 >[/dim] ", int, "请输入正确且存在的槽位数。请重试。", validator))
+        return s.isdigit() and os.path.exists(_slot_file(int(s)))
 
+    chosen = _choose_slot(
+        "[dim]输入您所需要选择的槽位 >[/dim] ",
+        validator,
+    )
     print(":: 稍等，正在切换存档...")
-    mkflag("defaultslot", str(islot))
-    if askyn(":: 是否要立即加载该存档槽位？", "n"):
-        svslot(islot)
+    mkflag("defaultslot", str(chosen))
+    if askyn(":: 是否要立即加载该存档槽位？[Y/n]", "n"):
+        svslot(chosen)
         svreload()
         print(":: 存档加载成功。")
         console.input("[dim]Enter 继续游戏 >[/dim] ")
         return True
-    else:
-        return False
+    return False
 
 
 def swget() -> str:
-    """Get storyWhere value."""
-    if not save.gotattr("storyWhere"):
+    """Read ``storyWhere``."""
+    value = save.get("storyWhere")
+    if not isinstance(value, str):
         save.storyWhere = "1000"
         return "1000"
-    else:
-        return save.storyWhere #type: ignore
+    return value
 
-def swset(sw: str):
-    """Set storyWhere value."""
+
+def swset(sw: str) -> None:
+    """Write ``storyWhere``."""
+    if not isinstance(sw, str):
+        raise TypeError("storyWhere must be a string")
     save.storyWhere = sw
 
-def aprint(string: str, delay: float = 0.4):
-    """manAI print, or slow print."""
+
+def aprint(string: str, delay: float = 0.4) -> None:
+    """Print and wait (manAI style)."""
     print(string)
     sleep(delay)
 
-def askperm(permission_name: str, permission_command: str, perm_desc: str, rejectable: bool = True, who: str = "manAI") -> bool:
-    """
-    manAI / something permission asking.
-    
-    :param permission_name: What permission does {who} wants.
-    :param permission_command: What command does {who} wants to run.
-    :param perm_desc: Permission's description.
-    :param rejectable: Does user can cancel.
-    :param who: Who wants to do it.
-    :return bool: Does user accept.
-    """
-    print(f":: [cyan][索要权限][/cyan] {who} 申请{permission_name}。")
-    print(f"   [dim]它将要执行：[/dim]")
-    print(f"       {permission_command}")
-    print(f"   [dim]作用：{perm_desc}[/dim]")
+
+def askperm(
+    permission_name: str,
+    permission_command: str,
+    perm_desc: str,
+    rejectable: bool = True,
+    who: str = "manAI",
+) -> bool:
+    """Ask the user for a permission."""
+    print(f":: [cyan][索要权限][/cyan] {who} 申请{escape(permission_name)}。")
+    print("   [dim]它将要执行：[/dim]")
+    print(f"       {escape(permission_command)}")
+    print(f"   [dim]作用：{escape(perm_desc)}[/dim]")
     if not rejectable:
-        print(f":: 无法取消，已经过 Unrejectable Command 审查。")
+        print(":: 无法取消，已经过 Unrejectable Command 审查。")
         return True
-    print(f":: 是否同意？[Y/n] ", end="")
-    yn = input().strip().lower()
-    return yn != "n"
+    print(":: 是否同意？[Y/n] ", end="")
+    try:
+        yn = input().strip().lower()
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return False
+    if yn == "":
+        return True
+    return yn in ("y", "yes")
 
-def saveit():
-    """Save user save without prompting."""
-    save(f"flags/{slot}","w")
 
-def saveitp():
-    """Save user save."""
-    print(f"[cyan][!][/cyan] 存档已保存！")
+def saveit() -> None:
+    """Save the active slot without extra output."""
+    os.makedirs("flags", exist_ok=True)
+    save.save(_slot_file())
+
+
+def saveitp() -> None:
+    """Save the active slot and announce it."""
+    print("[cyan][!][/cyan] 存档已保存！")
     saveit()
 
-def mkachieve(achieve_name: str, achieve_desc: str, achieve_id: str):
-    """
-    Make achieve.
 
-    :param achieve_name: Achievement's name.
-    :param achieve_desc: Description.
-    :param achieve_id: Achievement's ID, storage name.
-    """
-    if flags(achieve_id): return
+def mkachieve(achieve_name: str, achieve_desc: str, achieve_id: str) -> None:
+    """Unlock an achievement once."""
+    if flags(achieve_id):
+        return
     print(f"[cyan][!][/cyan] 获得成就：{achieve_name}")
     print(f"    [dim]{achieve_desc}[/dim]")
     mkflag(achieve_id, f":: 成就：{achieve_name}\n    - {achieve_desc}")
 
-def fs_writesave(ifs: FileSystem):
-    save.fileSystem = ifs.__str__()
+
+def fs_writesave(ifs: FileSystem) -> None:
+    """Store *ifs* in the in-memory save state."""
+    save.fileSystem = ifs.DumpToFile()
+
 
 def fs_fromsave() -> FileSystem:
+    """Rebuild a file system from the in-memory save state."""
+    dump = save.get("fileSystem")
+    if not isinstance(dump, str) or not dump:
+        raise ValueError("save state has no serialized file system")
     ifs = FileSystem({}, [])
-    ifs.LoadFromFile(save.fileSystem)
+    ifs.LoadFromFile(dump)
     return ifs
 
-def fs_initialize(ifs: FileSystem):
+
+def fs_initialize(ifs: FileSystem) -> FileSystem:
+    """Load saved file system state into *ifs* (or save *ifs* when empty)."""
     if save.gotattr("fileSystem"):
-        fs_fromsave()
+        try:
+            loaded = fs_fromsave()
+        except (OSError, ValueError, TypeError) as exc:
+            print(f":: [yellow]文件系统存档损坏，已重新初始化：{escape(str(exc))}[/yellow]")
+            fs_writesave(ifs)
+        else:
+            ifs.files.clear()
+            ifs.files.update(loaded.files)
+            ifs.directories.clear()
+            ifs.directories.extend(loaded.directories)
     else:
         fs_writesave(ifs)
+    use_filesystem(ifs)
+    return ifs
+
 
 def userinfo_get() -> list[str]:
-    # get userinfo from flag.
-    if not flags("userinfo"):
-        raise FileNotFoundError("You can't read an uninitialized userinfo.")
+    """Read the four userinfo fields as a list."""
+    return list(read_userinfo())
 
-    userinfo = rdflag("userinfo")
-    return userinfo.split("\n")
 
-def passwd_faillock(userinfo: list[str], ifs: FileSystem) -> bool:  #type: ignore
-    fileContent: list[str] = ifs.ReadFile("/etc/faillocks/faillock", list[str], "system") #type: ignore
-    for line in fileContent.split("\n"): #type: ignore
+def passwd_faillock(
+    userinfo: list[str] | tuple[str, ...],
+    ifs: FileSystem,
+) -> bool:
+    """Return ``True`` when *userinfo*'s user is currently locked out."""
+    try:
+        content = ifs.ReadFile("/etc/faillocks/faillock", str, "system")
+    except (DirectoryNotExists, FileNotFoundError, AccessDenied):
+        return False
+    username = userinfo[0]
+    lines = [line for line in content.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
         columns = line.split("|")
-        if userinfo[0] != columns [0]:
+        if len(columns) < 5 or columns[0] != username:
             continue
-
-        itime = datetime.datetime.fromisoformat(columns[3])
-        now = datetime.datetime.now()
-        itime = itime + datetime.timedelta(seconds=60)
-        if itime > now:
-            filec = fileContent.split("\n")  #type: ignore
-            filec.remove(line)
-            WriteFile("/etc/faillocks", "faillock", file_content=filec)
-            return False
-        else:
+        try:
+            locked_at = datetime.datetime.fromisoformat(columns[3])
+            duration = int(columns[4])
+        except ValueError:
+            continue
+        if locked_at + datetime.timedelta(seconds=duration) > datetime.datetime.now():
             return True
+        lines.pop(index)
+        remaining = lines if lines else [""]
+        WriteFile(
+            "/etc/faillocks",
+            "faillock",
+            file_content=remaining,
+            access="system",
+            target=ifs,
+        )
+        return False
     return False
 
 
-def passwd_checker(userinfo: list[str], ifs: FileSystem, requirer: str = "sudo") -> bool: #type: ignore
-    wrong_times = 0
-    while True:
+def _add_lock(
+    userinfo: list[str] | tuple[str, ...],
+    ifs: FileSystem,
+    requirer: str,
+    duration: int = 60,
+) -> None:
+    lock_line = "|".join(
+        [
+            userinfo[0],
+            requirer,
+            "faillock",
+            datetime.datetime.now().isoformat(),
+            str(duration),
+        ]
+    )
+    try:
+        existing = ifs.ReadFile("/etc/faillocks/faillock", str, "system")
+    except (DirectoryNotExists, FileNotFoundError, AccessDenied):
+        existing = ""
+    lines = [
+        line
+        for line in existing.splitlines()
+        if line.strip() and line.split("|")[0:1] != [userinfo[0]]
+    ]
+    lines.append(lock_line)
+    permissions = [PermEnum.Access_Denied, PermEnum.Listable]
+    try:
+        if "faillock" not in ifs.ListDirectory("/etc/faillocks", access="system"):
+            CreateFile(
+                "faillock",
+                file_permission=permissions,
+                file_content=lines,
+                file_owner=["root"],
+                file_parent="/etc/faillocks",
+                target=ifs,
+                access="system",
+            )
+        else:
+            WriteFile(
+                "/etc/faillocks",
+                "faillock",
+                file_content=lines,
+                access="system",
+                target=ifs,
+            )
+    except DirectoryNotExists:
+        CreateDirectory(
+            "",
+            "/etc",
+            full_path="/etc/faillocks",
+            target=ifs,
+            access="system",
+        )
+        CreateFile(
+            "faillock",
+            file_permission=permissions,
+            file_content=lines,
+            file_owner=["root"],
+            file_parent="/etc/faillocks",
+            target=ifs,
+            access="system",
+        )
+
+
+def passwd_checker(
+    userinfo: list[str] | tuple[str, ...],
+    ifs: FileSystem,
+    requirer: str = "sudo",
+    max_attempts: int = 5,
+) -> bool:
+    """Verify the password for *userinfo* and update the lockout record."""
+    if passwd_faillock(userinfo, ifs):
+        print(f"{requirer}: account is locked, please wait.")
+        return False
+    for _ in range(max(1, max_attempts)):
         try:
             pwd = getpass.getpass(f"{requirer}: f{userinfo[0]} 's password: ")
-        except KeyboardInterrupt or EOFError:
-            print(f"{requirer}: need password")
-        else:
-            if md5(pwd + userinfo[3]) == userinfo[2] and not passwd_faillock(userinfo, ifs):
-                return True
-            else:
-                if wrong_times >= 4:
-                    print(f"{requirer}: {wrong_times} times incorrect password try.")
-                    print(f"{requirer}: please wait 60 seconds then try again.")
-                    if not "faillock" in ifs.ListDirectory("/etc/faillocks"):
-                        CreateFile("faillock", file_permission=[PermEnum.Access_Denied, PermEnum.Listable], file_content=[
-                            f"{userinfo[0]}|{requirer}|faillock|{datetime.datetime.now()}|60"
-                        ], file_owner="root")
-                    else:
-                        WriteFile("/etc/faillocks", "faillock", file_content=[
-                            f"{userinfo[0]}|{requirer}|faillock|{datetime.datetime.now()}|60"
-                        ], access="system")
-                print(f"{requirer}: incorrect password. please try again.")
-                wrong_times += 1
-                continue
+        except (KeyboardInterrupt, EOFError):
+            print()
+            return False
+        if verify_password(pwd, userinfo[1], userinfo[3]):
+            return True
+        print(f"{requirer}: incorrect password.")
+    _add_lock(userinfo, ifs, requirer)
+    print(f"{requirer}: too many incorrect password attempts; locked for 60 seconds.")
+    return False
 
+
+# endregion
+
+# region Commands
 @register("setslot")
-def setslot(args: Arguments):  #type: ignore
+def setslot(args: Arguments) -> None:
     svdslot()
-    return
+
 
 @register("openslot")
-def openslot(args: Arguments): #type: ignore
+def openslot(args: Arguments) -> None:
     svoslot()
-    return
+
 
 @register("loadslot")
-def loadslot(args: Arguments): #type: ignore
-    if askyn(":: [yellow][ ! 警告 ][/yellow] 加载当前槽位存档后，内存中存档信息将会丢失。继续吗？[y/N]", "n"):
+def loadslot(args: Arguments) -> None:
+    if askyn(
+        ":: [yellow][ ! 警告 ][/yellow] 加载当前槽位存档后，内存中存档信息将会丢失。继续吗？[y/N]",
+        "n",
+    ):
         print(":: 稍等，存档加载中...")
         svreload()
         print(":: 存档加载完毕。")
-        return
     else:
         print(":: 用户拒绝，正在退出...")
-        return
+
 
 @register("resaveslot")
-def resaveslot(args: Arguments): #type: ignore
-
+def resaveslot(args: Arguments) -> None:
     svsslot()
-    return
+
 
 @register("saveslot")
-def saveslot(args: Arguments): #type: ignore
-
-    if askyn(":: [yellow][ ! 警告 ][/yellow] 保存当前槽位存档后，文件中存档信息将会丢失。继续吗？[y/N]", "n"):
+def saveslot(args: Arguments) -> None:
+    if askyn(
+        ":: [yellow][ ! 警告 ][/yellow] 保存当前槽位存档后，文件中存档信息将会丢失。继续吗？[y/N]",
+        "n",
+    ):
         saveitp()
-        return
     else:
         print(":: 用户拒绝，正在退出...")
+
+
+# endregion
+
+# region Default slot
+def load_default_slot() -> None:
+    """Load ``flags/defaultslot`` if it exists and points at a valid slot."""
+    if not flags("defaultslot"):
         return
+    try:
+        chosen = int(rdflag("defaultslot").strip())
+        svslot(chosen)
+        svreload()
+    except (TypeError, ValueError, OSError) as exc:
+        print(f":: [yellow]默认存档槽位无效，已忽略：{escape(str(exc))}[/yellow]")
 
-if flags("defaultslot"):
-    slot = int(rdflag("defaultslot"))
-    svreload()
 
-#endregion
+# The historical behaviour was "load the default slot while importing
+# Perhaps.fastutil".  Keep it, but never let a broken slot crash the import.
+load_default_slot()
+# endregion

@@ -1,126 +1,72 @@
 # doas -su mylife.root
-## FRAMEWORK Inject points
+## FRAMEWORK Inject / Patcher API
 
 ### 常识
-- 当 Inject 函数返回 `tuple` 或 `list` 时，`run_injects` 自动检查 (在可返回处使用 `LISTRET` 表明) 其的第一项，判断是否需要执行后方（第二项）中提供的函数。
-- **注意：** 当 `ret[0]` (即函数返回值) 为 -1 时，`run_injects` 会执行 `ret[1]`
-- Inject 分为 `Patcher`s 和 `Inject`s，使用同一个函数定义，几乎没有区别。但 `Patcher` 会将返回的值直接替换为 `Patcher` 函数返回的值。
 
-### `before_setup`
-注入点为 `base.py:L227`，在 setup 函数开始时执行。
+- 注入点用 `@inject("name")` 注册，可以注册**多个**回调；按注册顺序依次执行。
+- 注入回调只允许返回：
+  - `None`：无影响，框架继续默认行为；
+  - `Handled()`：表示"这次由我处理"，跳过框架默认行为；
+  - `Handled(callback)`：同上，并立即调用 `callback()`；
+  - `Cancel()`：仅用于 `after_enter`，表示取消当前输入的命令解析。
+  - 返回其它值会抛 `TypeError`，不再使用旧的 `(-1, Callable)` 魔术列表。
+- 补丁点用 `@patcher("name")` 注册，与 Inject 分表，互不覆盖；多个补丁按注册顺序链式执行：
+  - 回调签名 `func(current_value, *args) -> new_value | None`；
+  - 返回 `None` 表示不修改，返回其它值会替换为下一次链的输入。
+- `run_injects()` 返回 `InjectReport`（`values` / `executed` / `handled` / `cancelled`），不再靠返回值类型猜语义。
 
-参数：`None`
+### 注入点
 
-可返回：
-`LISTRET(-1,Callable)` 来执行 Callable.
+| 注入点 | 调用时机 | 参数 |
+| --- | --- | --- |
+| `before_setup` | `setup()` 开始时 | 无 |
+| `before_load` | `init()` 打印开机文本前 | 无 |
+| `before_shell_pre` | `init()` 打印欢迎信息前 | 无 |
+| `while_head` | 主循环每轮开头 | 无 |
+| `userinfo` | 主循环每轮，带账号信息 | `username, password_hash, hostname, salt` |
+| `getdir` | 主循环每轮，带当前目录 | `directory: str` |
+| `after_enter` | 用户敲下回车后，命令解析前 | `input: str` |
+| `before_execute` | 命令解析完成、执行前 | `cmd: Command` |
+| `after_execute` | 命令执行后 | `cmd: Command`, `returns: list[Arguments]` |
 
-### `before_load`
-注入点为 `base.py:L293`，在显示主程序加载日志前执行。
+`before_setup` / `before_load` / `before_shell_pre` 返回 `Handled()` 可跳过框架默认逻辑；
+`after_enter` 返回 `Cancel()` 会跳过命令解析。
 
-参数：`None`
+### 补丁点
 
-可返回：
-- `LISTRET(-1,Callable)` 来执行 Callable.
-
-### `before_shell_pre`
-注入点为 `base.py:L315`，在显示 Shell 提示执行。
-
-参数：`None`
-
-可返回：
-- `LISTRET(-1,Callable)` 来执行 Callable.
-
-### `while_head`
-注入点为 `base.py:L347`，在主循环 while 头部执行。
-
-参数：`None`
-
-可返回：`None`
-
-### `userinfo`
-注入点为 `base.py:L348`，在 `while_head` 后方执行。
-
-参数：
-- `username: str`
-- `password_hash: str`
-- `hostname: str`
-- `salt: str`
-*(`password_hash` 使用 md5, `salt` 为 6 位数字。)*
-
-可返回：`None`
-
-### `getdir`
-注入点为 `base.py:L349`，在 `userinfo` 后方执行。
-
-参数：
-- `directory: str`
-*(`directory` 代表主循环中的 `directory` 变量的值)*
-
-可返回：`None`
-
-### `after_enter`
-注入点为 `base.py:L356`，在用户输入命令敲下回车后执行，此时暂未开始命令解析。
-
-参数：
-- `input: str`
-*(`input` 为用户输入)*
-
-可返回：
-- `LISTRET(-1,Callable)` 来执行 Callable，同时**会取消命令处理**。
-
-### `before_execute`
-注入点为 `base.py:L364`，在用户输入命令敲下回车后执行，此时命令解析完成，开始执行。
-
-参数：
-- `cmd: Command`
-*(`cmd` 为 `Command` 类，详情参考其定义)*
-
-可返回：`None`
-
-### `after_execute`
-注入点为 `base.py:L366`，在用户输入命令敲下回车后执行，此时命令执行完毕。
-
-参数：
-- `cmd: Command`
-- `returns: Arguments`
-*(`cmd` 为 `Command` 类，详情参考其定义; `returns` 为 `Arguments` 类，为命令执行结果。)*
-
-### `prompt_patcher` (`PATCHER`)
-修补点为 `base.py:L360`，在 `getdir` (`INJECT`) 执行后开始修补。
-
-参数：
-- `prompt: str`
-- `userinfo_tuple: tuple[str, str, str, str]`
-- `directory: str`
-*(`prompt` 为旧 `prompt`，`userinfo_tuple` 和 `userinfo (PATCHER)` 传参一样。)*
-
-返回：
-- `str`
-
-此时将应用修补。
-
-### `dir_patcher` (`PATCHER`)
-修补点为 `base.py:L403`, 在 `prompt_patcher` PATCH 前开始修补。
-
-参数：
-- `directory: str`
-
-返回：
-- `str`
-
-此时将应用修补。
-
-## FRAMEWORK Chapter develop navigator
-
-### register command
-register 使用 `base.py:register`，是一个 decorator。
-
-decorator 传参为 command 的名称，即调用名。
+| 补丁点 | 调用时机 | 参数 | 返回 |
+| --- | --- | --- | --- |
+| `prompt_patcher` | 主循环显示提示符前 | `prompt: str`, `userinfo: tuple[str,str,str,str]`, `directory: str` | `str` 或 `None` |
+| `directory_patcher` | `getdir` 注入后、显示提示符前 | `directory: str` | `str` 或 `None` |
 
 示例：
 
 ```python
-from Perhaps.base import *
+from Perhaps import *
+
+
+@patcher("prompt_patcher")
+def prompt(prompt: str, userinfo: tuple[str, str, str, str], directory: str) -> str:
+    # 用户输入可能包含 rich 标记，拼接时务必 escape
+    return f"[green]{escape(userinfo[0])}[/green]:{escape(directory)}[cyan]$[/cyan] "
+
+
+@inject("after_enter")
+def skip_debug(input: str):
+    if input == "debug":
+        print("debug command ignored")
+        return Cancel()
+    return None
+```
+
+## FRAMEWORK Chapter develop navigator
+
+### register command
+
+`register` 是装饰器，参数为命令的调用名。同名命令默认会抛 `ValueError`；如确实要覆盖（例如 Story 覆盖框架自带的 `ls`），传 `override=True`。
+
+```python
+from Perhaps import *
 
 
 @register("helloWorld")
@@ -128,15 +74,14 @@ def _(args: Arguments):
     print("Hello, World!")
 ```
 
-注意：函数的参数无论要不要，都要提供 args 作为参数空位。
+函数必须接收一个 `args: Arguments` 参数。用户名、密码等敏感输入不要直接拼进 rich 输出，使用 `escape()`。
 
 ### arg tunnel
-drom 框架是原生支持 tunnel (管道) 的，在函数获得 `args` 之后使用 `args["TUNNEL"]` 即可获得上级管道输出。
 
-示例：
+`drom` 原生支持管道。管道下游通过 `args["TUNNEL"]` 拿到上游命令的返回值（`Arguments` 或 `None`），下游自己的参数不会被管道污染。
 
 ```python
-from Perhaps.base import *
+from Perhaps import *
 
 
 @register("tunnelecho")
@@ -146,5 +91,31 @@ def _(args: Arguments):
 
 @register("echo")
 def _(args: Arguments):
-    print(args["TUNNEL"])
+    upstream = args["TUNNEL"]
+    print(upstream[0] if upstream is not None else "")
 ```
+
+`|` 必须能被 shell 解析：带引号的 `"|"` 会作为普通参数；多级管道（`a | b | c`）也支持。
+
+`Arguments` 缺少位置参数时抛 `MissingArgument`（`IndexError` 子类），主循环会显示"arguments not enough"，不会再吞掉命令内部的真实 `IndexError`。
+
+### 会话与账号
+
+- `setup()` 会把 `scrypt` 密码哈希、随机盐、用户名、主机名写入 `flags/userinfo`，并创建 `flags/login_required`。
+- 主循环默认在 `flags/login_required` 存在时调用 `login()` 要求密码；老存档没有该 flag 时保持直接进入。
+- 需要密码/锁定检查的剧情命令可以使用 `fastutil.passwd_checker(userinfo, fs)`；锁定记录在虚拟文件系统 `/etc/faillocks/faillock`。
+
+### 存档 / 虚拟文件系统
+
+- `Save` 的 `load/save` 只接受相对路径，拒绝 `..`/绝对路径；写入使用临时文件 + `os.replace`，不会产生半截 JSON。
+- `fs_writesave(fs)` 保存的是 JSON，`fs_fromsave()` 返回重建后的 `FileSystem`，`fs_initialize(fs)` 会真正把存档加载进传入的文件系统并切换全局文件系统。
+- `FileSystem.DumpToFile()` / `LoadFromFile()` 使用带版本号的 JSON，正文里出现 `;`、`]`、`}`、逗号、数字串都能正确往返。
+- 权限统一由 `ProtectedList` / `_require()` 检查：读需要 `Readable`，写需要 `Writable`，列目录需要可列；`Access_Denied` 优先拒绝。系统内部可显式传 `access="system"`。
+- `CreateFile` / `CreateDirectory` / `WriteFile` 支持 `target=` 指定文件系统，`access="system"` 绕过用户权限；`file_owner` 可以是字符串。
+- `InitBaseFileSystem()` 可重复调用（会重置全局文件系统）；用户名含 `/` 等分隔符会被拒绝。
+
+## 环境
+
+- Python 3.10+
+- `pip install -r requirements.txt`
+- 从仓库根目录运行 `python -m Story`；`Story/__main__.py` 会自动切到 `Story/` 目录并补齐 `sys.path`，因此不再需要手动设置 `PYTHONPATH`。

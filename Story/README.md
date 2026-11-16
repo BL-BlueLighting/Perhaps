@@ -19,25 +19,4 @@
 
 ## 技术架构 / Technology Arch.
 
-doas -su mylife.root 基于 Python 和 Rich.
-```
-Framework --------------------
-             rich            |
-            shlex            |
-base.py  -----|              |
-    |- Base Shell            |
-    |- Command Analzying     | 
-    |- Inject Points         |
-    |- I/O Control           |
-    |- Flags Controlling     |
-    -------------|           |
-                 |           |
-saving.py -------|           |
-    |- Base Saving System    |
-            -----|           |
-                 |           |
-fastutil.py -----|           |
-    |- Saving system extend  |
-    |- Quick tools           |
-------------------------------
-```
+doas -su mylife.root 基于 Python 和 Perhaps Framework.

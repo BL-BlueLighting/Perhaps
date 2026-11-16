@@ -5,8 +5,8 @@ Fast command utilities
 Base command utilities for game.
 """
 
-from framework.base import *
-from framework.saving import *
+from Perhaps.base import *
+from Perhaps.saving import *
 from typing import Any
 
 @register("clear")

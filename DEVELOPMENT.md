@@ -118,11 +118,13 @@ register 使用 `base.py:register`，是一个 decorator。
 decorator 传参为 command 的名称，即调用名。
 
 示例：
+
 ```python
-from framework.base import *
+from Perhaps.base import *
+
 
 @register("helloWorld")
-def _ (args: Arguments):
+def _(args: Arguments):
     print("Hello, World!")
 ```
 
@@ -132,14 +134,17 @@ def _ (args: Arguments):
 drom 框架是原生支持 tunnel (管道) 的，在函数获得 `args` 之后使用 `args["TUNNEL"]` 即可获得上级管道输出。
 
 示例：
+
 ```python
-from framework.base import *
+from Perhaps.base import *
+
 
 @register("tunnelecho")
-def _ (args: Arguments):
+def _(args: Arguments):
     return args[0]
 
+
 @register("echo")
-def _ (args: Arguments):
+def _(args: Arguments):
     print(args["TUNNEL"])
 ```

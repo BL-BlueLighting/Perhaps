@@ -1,6 +1,6 @@
 """
 doas -su mylife.root
-Base Framework
+Base Framework - Perhaps
 
 Usage:
 >>> python base.py
@@ -381,7 +381,7 @@ def init():
 
 #region Main While
 def main_while():
-    """Run doas -su mylife.root framework main loop"""
+    """Run doas -su mylife.root Perhaps main loop"""
     username, password_hash, hostname, salt = open('./flags/userinfo', 'r').readlines()
 
     username = username.strip()

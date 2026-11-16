@@ -1,6 +1,6 @@
 *_test*.py
-flags/
-flags/*
+Story/flags/
+Story/flags/*
 __pycache__
 .venv
 .idea/

@@ -6,10 +6,10 @@ First chapter, Repent, then Recreate
 What adventure more?
 """
 
-from framework import *
-from framework.fastcmdutil import *
-from framework.fileutil import *
-from framework.manAI import *
+from Perhaps import *
+from Perhaps.fastcmdutil import *
+from Perhaps.fileutil import *
+from Perhaps.manAI import *
 
 fs = FileSystem({}, [])
 

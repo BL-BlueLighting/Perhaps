@@ -6,7 +6,7 @@ By BL.BlueLighting
 Enjoy! :-)
 """
 
-from framework import *
+from Perhaps import *
 
 #region Injects
 @inject("prompt_patcher")

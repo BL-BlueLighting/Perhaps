@@ -28,7 +28,7 @@ console = rich.console.Console()
 console.clear()
 print = console.print
 
-LOGO = open("./texts/logo.txt", "r").read()
+LOGO = open("texts/logo.txt", "r").read()
 
 print("[white]" + LOGO + "[/white]", justify="center")
 print()

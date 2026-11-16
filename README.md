@@ -1,7 +1,7 @@
 <div align="center">
     <img src="./README.Logo.png" style="width: 640px;">
     <h1>Perhaps Framework</h1>
-    <i>An virtual system game / terminal emulator framework</i>
+    <i>A virtual system game / terminal emulator framework</i>
     <br/>
     <div style="margin-top: 12px">
         <img src="https://img.shields.io/badge/Using-Python-blue">

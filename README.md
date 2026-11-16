@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="./README.logo.png" style="width: 640px;">
+    <img src="./README.Logo.png" style="width: 640px;">
     <h1>Perhaps Framework</h1>
     <i>An virtual system game / terminal emulator framework</i>
     <br/>

@@ -132,23 +132,23 @@ class ProtectedList(list):
     def pop(self, index: SupportsIndex = -1, /) -> bool:
         return self.remove(list.__getitem__(self, index))
 
-    def __getitem__(self, i: str | SupportsIndex | slice, /) -> Any:
+    def __getitem__(self, i: str | SupportsIndex | slice, sudo: bool = False, /) -> Any:
         if isinstance(i, str):
             if i.lstrip("-").isdigit():
                 return list.__getitem__(self, int(i))
             for file in list.__iter__(self):
                 if file.fileName == i:
                     permissions = file.fileAttributes["Permission"]
-                    if PermEnum.Access_Denied in permissions or PermEnum.Unlistable in permissions:
+                    if (PermEnum.Access_Denied in permissions or PermEnum.Unlistable in permissions) and not sudo:
                         raise AccessDenied(f"Access denied to file '{file.fileName}'")
                     return file
             raise ValueError("Can't find file in list.")
         return list.__getitem__(self, i)
 
-    def __iter__(self):
+    def __iter__(self, sudo: bool = False):
         def visible(file: FileInformation) -> bool:
             permissions = file.fileAttributes["Permission"]
-            return ((PermEnum.Access_Denied not in permissions) and (PermEnum.Unlistable not in permissions)) or (PermEnum.Listable in permissions)
+            return (((PermEnum.Access_Denied not in permissions) and (PermEnum.Unlistable not in permissions)) or (PermEnum.Listable in permissions)) and not sudo
 
         return iter([file for file in list.__iter__(self) if visible(file)])
 
@@ -158,6 +158,10 @@ class ProtectedList(list):
             rstr += "{" + f"{fi!r}" + "}"
         rstr += ")"
         return rstr
+
+    def __setitem__(self, key, value):
+        permCheck = self.__getitem__(key)
+        return list.__setitem__(self, key, value)
 
 class FileSystemPath(pathlib.PurePosixPath):
     def __init__(self, *args: str | os.PathLike[str]):
@@ -315,7 +319,7 @@ class FileSystem:
             self.files.pop(directory, None)
         return True
 
-    def ReadFile(self, path: str, require: type = str) -> str | bytes | list[str]:
+    def ReadFile(self, path: str, require: type = str, access: LiteralString["system", "user", "manAI"] = "user") -> str | bytes | list[str]:
         """
         Read file.
         """
@@ -327,7 +331,7 @@ class FileSystem:
 
         file = self.files[pardir][self.GetFileId(p.name, pardir)]
         permissions = file.fileAttributes["Permission"]
-        if PermEnum.Access_Denied in permissions or PermEnum.Readable not in permissions:
+        if (PermEnum.Access_Denied in permissions or PermEnum.Readable not in permissions) and access != "system":
             raise AccessDenied(f"Access denied to file '{p.name}'")
 
         contents = list(file.fileAttributes["Contents"].attrlist)
@@ -487,6 +491,26 @@ class FileSystem:
         self.files.update(new_files)
         self.directories.clear()
         self.directories.extend(new_dirs)
+
+    def WriteFile(self,
+                  parentDirectoryPath: str,
+                  fileName: str,
+                  fileInformation: FileInformation,
+                  executor: LiteralString["system", "user", "manAI"] = "user"):
+        """
+        Write information to file.
+
+        :param parentDirectoryPath: Parent directory full path.
+        :param fileName: file's name.
+        :param fileInformation: replace fileInformation.
+        :param executor: who wants to execute. executor = user/system/manAI.
+        """
+        sourceFile: FileInformation = self.files[parentDirectoryPath].__getitem__(fileName, True)
+        if ((PermEnum.Access_Denied in sourceFile.fileAttributes) or (PermEnum.Unwritable in sourceFile.fileAttributes)) and (not executor == "system") and (not rdflag("userinfo").split("\n")[0] == sourceFile.fileAttributes.__getitem__("Owner")):
+            raise AccessDenied(f"You haven't access to write '{fileName}'.")
+
+        self.files[parentDirectoryPath][fileName] = fileInformation
+
 #endregion
 
 #region Files
@@ -516,51 +540,131 @@ dict [
 
 directories: list[str] = []
 
-fs = FileSystem(files, directories)
-
-for _directory in [
-    "/",
-    "/bin",
-    "/boot",
-    "/dev",
-    "/etc",
-    "/home",
-    "/home/perhaps",
-    "/lib",
-    "/lib64",
-    "/media",
-    "/mnt",
-    "/opt",
-    "/proc",
-    "/root",
-    "/run",
-    "/sbin",
-    "/srv",
-    "/sys",
-    "/tmp",
-    "/usr",
-    "/usr/bin",
-    "/usr/include",
-    "/usr/lib",
-    "/usr/lib64",
-    "/usr/local",
-    "/usr/local/bin",
-    "/usr/sbin",
-    "/usr/share",
-    "/var",
-    "/var/cache",
-    "/var/lib",
-    "/var/log",
-    "/var/tmp",
-]:
-    fs.AddDirectory(_directory)
-#endregion
-
-#region Injects
 def _join_path(base: str | None, path: str) -> str:
     if path.startswith("/") or path == "~" or path.startswith("~/"):
         return path
     return posixpath.join(base or "/", path)
+
+fs = FileSystem(files, directories)
+
+def InitBaseFileSystem():
+    fs = FileSystem(files, directories)
+
+    userinfo = rdflag("userinfo").split("\n")
+    user = userinfo[0]
+    pwdhash = userinfo[1]
+    hostname = userinfo[2]
+    hashsalt = userinfo[3]
+
+    for _directory in [
+        "/",
+        "/bin",
+        "/boot",
+        "/dev",
+        "/etc",
+        "/home",
+        "/home/perhaps",
+        "/home/" + user,
+        "/lib",
+        "/lib64",
+        "/media",
+        "/mnt",
+        "/opt",
+        "/proc",
+        "/root",
+        "/run",
+        "/sbin",
+        "/srv",
+        "/sys",
+        "/tmp",
+        "/usr",
+        "/usr/bin",
+        "/usr/include",
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/local",
+        "/usr/local/bin",
+        "/usr/sbin",
+        "/usr/share",
+        "/var",
+        "/var/cache",
+        "/var/lib",
+        "/var/log",
+        "/var/tmp",
+        "/etc/faillocks/"
+    ]:
+        fs.AddDirectory(_directory)
+    #endregion
+
+    CreateFile("humansh", file_content=["<BINARY>"], file_owner=["root"], file_parent="/bin")
+    CreateFile("hostname", file_content=[hostname], file_owner=["root"], file_parent="/etc")
+    CreateFile(
+        "hosts",
+        file_content=[
+            "127.0.0.1 localhost",
+            "::1 localhost ip6-localhost ip6-loopback",
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile(
+        "passwd",
+        file_content=[
+            "root:x:0:0:root:/root:/bin/humansh",
+            "perhaps:x:1000:1000:Perhaps:/home/perhaps:/bin/humansh",
+            f"{user}:x:1000:1000:{user}:/home/{user}:/bin/humansh"
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile(
+        "group",
+        file_content=[
+            "root:x:0:",
+            "perhaps:x:1000:",
+            f"{user}:x:1000:"
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile(
+        "fstab",
+        file_content=[
+            "/dev/sda1 / ext4 defaults 0 1",
+            "tmpfs /tmp tmpfs defaults 0 0",
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile("resolv.conf", file_content=["nameserver 127.0.0.1"], file_owner=["root"], file_parent="/etc")
+    CreateFile(
+        "os-release",
+        file_content=[
+            'NAME="HumanOS"',
+            'PRETTY_NAME="HumanOS v7.2.14-nature5-5-nature"',
+            "ID=humanos",
+            "VERSION_ID=7.2.14",
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile(
+        "shadow",
+        file_permission=[PermEnum.Access_Denied],
+        file_content=[
+            "root:*:19000:0:99999:7:::",
+            "perhaps:*:19000:0:99999:7:::",
+            f"{user}:*:19000:0:99999:7:::"
+        ],
+        file_owner=["root"],
+        file_parent="/etc",
+    )
+    CreateFile("messages", file_content=["HumanOS boot log initialized"], file_owner=["root"], file_parent="/var/log")
+    CreateFile("syslog", file_content=["HumanOS syslog initialized"], file_owner=["root"], file_parent="/var/log")
+
+    return fs
+
+#region Injects
 
 @inject("getdir")
 def _(args: str):
@@ -583,6 +687,7 @@ def _(args: str):
     if save.cdDirectory is None:
         return args
     return save.cdDirectory
+
 #endregion
 
 #region Register
@@ -602,7 +707,7 @@ def _ls(args: Arguments):
             if PermEnum.Access_Denied in file_info.fileAttributes["Permission"]:
                 fileColor = "red"
             if PermEnum.Runnable in file_info.fileAttributes["Permission"] and fileColor != "blue":
-                fileColor = "green" # bro you make a directory runnable is hyw?
+                fileColor = "green"  # bro you make a directory runnable is hyw?
             print(f"[{fileColor}]{file_info.fileName}[/{fileColor}]")
     except DirectoryNotExists:
         print(f"ls: cannot access '{path}': No such directory")
@@ -649,6 +754,7 @@ def _cd(args: Arguments):
 
     save.cdDirectory = path
     return
+
 #endregion
 
 #region Help Functions
@@ -726,70 +832,58 @@ def CreateDirectory(
 
     fs.AddDirectory(_join_path(directory_name, directory_parent), permissions)
 
+def WriteFile(
+        file_parent: str,
+        file_source_name: str,
+        file_name: str | None = None,
+        file_permission: Sequence[PermEnum] | None = None,
+        file_content: Sequence[str] | None = None,
+        file_date: Sequence[str] | None = None,
+        file_owner: Sequence[str] | None = None,
+        is_directory: bool = False,
+        access: LiteralString["system", "user", "manAI"] = "user"
+) -> None:
+    """
+    Write file / directory.
 
-CreateFile("humansh", file_content=["<BINARY>"], file_owner=["root"], file_parent="/bin")
-CreateFile("hostname", file_content=["humanos"], file_owner=["root"], file_parent="/etc")
-CreateFile(
-    "hosts",
-    file_content=[
-        "127.0.0.1 localhost",
-        "::1 localhost ip6-localhost ip6-loopback",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile(
-    "passwd",
-    file_content=[
-        "root:x:0:0:root:/root:/bin/sh",
-        "perhaps:x:1000:1000:Perhaps:/home/perhaps:/bin/sh",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile(
-    "group",
-    file_content=[
-        "root:x:0:",
-        "perhaps:x:1000:",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile(
-    "fstab",
-    file_content=[
-        "/dev/sda1 / ext4 defaults 0 1",
-        "tmpfs /tmp tmpfs defaults 0 0",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile("resolv.conf", file_content=["nameserver 127.0.0.1"], file_owner=["root"], file_parent="/etc")
-CreateFile(
-    "os-release",
-    file_content=[
-        'NAME="HumanOS"',
-        'PRETTY_NAME="HumanOS v7.2.14-nature5-5-nature"',
-        "ID=humanos",
-        "VERSION_ID=7.2.14",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile(
-    "shadow",
-    file_permission=[PermEnum.Access_Denied],
-    file_content=[
-        "root:*:19000:0:99999:7:::",
-        "perhaps:*:19000:0:99999:7:::",
-    ],
-    file_owner=["root"],
-    file_parent="/etc",
-)
-CreateFile("messages", file_content=["HumanOS boot log initialized"], file_owner=["root"], file_parent="/var/log")
-CreateFile("syslog", file_content=["HumanOS syslog initialized"], file_owner=["root"], file_parent="/var/log")
+    :param file_parent: File's parent (unchangable)
+    :param file_source_name: File's source name.
+    :param file_name: File's new name.
+    :param file_permission: New permissions. Using PermEnum, or direct use int.
+    :param file_content: New file content lines. No \\n.
+    :param file_date: New file create date. STRING!!!!
+    :param file_owner: Who creates this file or who own it.
+    :param access: Access permission.
+    :return None: nothing
 
+    All arguments leave None / Blank means unchange.
+    """
+    sourceFile: FileInformation = fs.files[file_parent].__getitem__(file_source_name, True)
+    extend_attr = FileAttribute("", "")
+
+    if file_permission is None:
+        file_permission = sourceFile.fileAttributes["Permission"]
+    if file_content is None:
+        file_content = sourceFile.fileAttributes["Contents"]
+    if file_date is None:
+        file_date = sourceFile.fileAttributes["Time"]
+    if file_owner is None:
+        file_owner = sourceFile.fileAttributes["Owner"]
+    if file_name is None:
+        file_name = sourceFile.fileName
+    if is_directory:
+        extend_attr = FileAttribute("Directory", ["yes"])
+
+    newFile = FileInformation(file_name, AttributeList(
+        [
+            file_permission,
+            file_content,
+            file_date,
+            file_owner,
+            extend_attr if extend_attr != FileAttribute("", "") else None
+        ]
+    ))
+    return fs.WriteFile(file_parent, file_source_name, newFile, access)
 #endregion
 
 # IT'S WHAT MOTHER FUCKING CODES I WROTE I WASTED MANY HOURS TO WRITE THIS SHIT

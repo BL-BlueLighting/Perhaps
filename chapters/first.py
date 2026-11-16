@@ -11,7 +11,12 @@ from framework.fastcmdutil import *
 from framework.fileutil import *
 from framework.manAI import *
 
+fs = FileSystem({}, [])
+
 def MakeFilesAndDirectories():
+    global fs
+    fs = InitBaseFileSystem()
+
     #region manAI
     CreateFile("WHEN_U_BACK.txt", file_content = [
         "Remember me! Use manAI!"

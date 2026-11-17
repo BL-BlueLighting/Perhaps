@@ -39,6 +39,8 @@ fm.main_while()
 - 老存档没有 `flags/login_required` 时保持免密进入。
 - 存档默认自动读档/退出自动保存；开关在 `Perhaps/config.py`，开发者可关闭或注册自己的 `before_quit` 接管流程。
 - `flags/` 下的文件名会做路径校验，不能包含 `/`、`..` 等。
+- 日志默认关闭；在 `Perhaps/config.py` 打开 `LOGGING_ENABLED` 后写 `logs/perhaps-YYYY-MM-DD.log`。崩溃时会额外生成完整的 `logs/crash-YYYY-MM-DD-HH-MM-SS.log`（含 traceback）。
+- 内置存档启用时，`save.DebugSwitch = True` 会自动开启日志；可用 `AUTO_LOGGING_FROM_DEBUG_SWITCH = False` 关闭这个自动行为。
 
 ## 提示
 如果您在寻找 doas -su mylife.root 游戏，参见本项目目录下 `Story` 文件夹，或者点此->[Story/README.md](Story/README.md)。

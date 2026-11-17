@@ -38,6 +38,12 @@ def debugger(args: Arguments):
         save.__setattr__(key, value)
         return f"Archive's {key} has been set to {value}."
 
+    def CrashIt(anyth: None):
+        """Crash your terminal / game"""
+        if askyn("Really?> "):
+            raise Exception("Just kidding, nothing happens, and U made this. :-)")
+        return "Wow. What coward!"
+
     def fallback(param: str):
         return "This debugger command is not defined."
 
@@ -45,7 +51,8 @@ def debugger(args: Arguments):
         "sw": GetSW,
         "ssw": SetSW,
         "sa": ShowArchive,
-        "ea": EditArchive
+        "ea": EditArchive,
+        "ci": CrashIt
     }
 
     while True:

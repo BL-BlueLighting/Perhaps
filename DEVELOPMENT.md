@@ -119,6 +119,15 @@ def _(args: Arguments):
 
 其它类型会抛 `TypeError`。
 
+### 日志与崩溃报告
+
+- 日志默认关闭；在 `Perhaps/config.py` 设置 `LOGGING_ENABLED = True` 启用，日志写到 `logs/perhaps-YYYY-MM-DD.log`。
+- `LOG_DIR` 可改日志目录，`LOG_LEVEL` 控制级别，`LOG_TO_CONSOLE` 可同时输出到控制台。
+- 框架在 `init()` / `main_while()` 安装 `sys.excepthook`；主循环内的异常会写入 `logs/crash-YYYY-MM-DD-HH-MM-SS.log`，包含环境信息、异常类型/参数/原因、完整 traceback 和当前栈。
+- 内置存档系统启用（`SAVE_PATCH_ENABLED`）且 `save.DebugSwitch` 为真时，会自动开启日志；该自动行为由 `AUTO_LOGGING_FROM_DEBUG_SWITCH` 控制，设为 `False` 可忽略 DebugSwitch。
+- 代码里可用 `log_info` / `log_warning` / `log_error` / `log_debug` / `log_exception`，或 `get_logger("名字")` 获取标准 `logging.Logger`。
+- 崩溃文件是独立文件，不依赖日志开关；即使日志关闭，发生 `crash-*.log` 也会写出来。
+
 ### 存档 / 虚拟文件系统
 
 - `Perhaps/config.py` 提供存档流程开关（默认全开）：`SAVE_PATCH_ENABLED`、`AUTO_LOAD_ON_START`、`AUTO_LOAD_ON_SLOT_SELECT`、`AUTO_SAVE_ON_EXIT`、`DEFAULT_SLOT`。

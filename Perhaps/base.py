@@ -20,13 +20,18 @@ Design notes
 
 from __future__ import annotations
 
+import datetime
 import getpass
 import hashlib
 import hmac
+import logging
 import os
+import platform
 import random
 import shlex
+import sys
 import tempfile
+import traceback
 import argparse
 from dataclasses import dataclass, field
 from time import sleep
@@ -37,6 +42,8 @@ import rich
 import rich.console as ricon
 from builtins import print as rprint
 from rich.markup import escape
+
+from . import config
 
 console = ricon.Console()
 print = console.print
@@ -54,6 +61,291 @@ def _valid_component(value: str) -> bool:
     if value in (".", ".."):
         return False
     return not any(char in _CONTROL_CHARS for char in value)
+
+# region Logging / crash reports
+_LOGGER_NAME = "Perhaps"
+logging.getLogger(_LOGGER_NAME).addHandler(logging.NullHandler())
+_logger_configured = False
+_log_file_path: str | None = None
+_excepthook_installed = False
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def debug_switch_enabled() -> bool:
+    """Is ``save.DebugSwitch`` currently truthy?
+
+    Only consulted when the built-in save flow is enabled.  The story's
+    debugger writes this key, so it is allowed to be a bool or a string.
+    """
+    if not getattr(config, "SAVE_PATCH_ENABLED", True):
+        return False
+    try:
+        from .saving import save as maybe_save
+
+        if not maybe_save.gotattr("DebugSwitch"):
+            return False
+        return _truthy(maybe_save.DebugSwitch)
+    except Exception:
+        return False
+
+
+def logging_wanted() -> bool:
+    """Should a normal log file be opened right now?"""
+    if getattr(config, "LOGGING_ENABLED", False):
+        return True
+    return bool(
+        getattr(config, "AUTO_LOGGING_FROM_DEBUG_SWITCH", True)
+        and debug_switch_enabled()
+    )
+
+
+def configure_logging(
+    *,
+    log_dir: str | None = None,
+    level: int | str | None = None,
+) -> str | None:
+    """Configure the file logger.  Returns the log path, or ``None`` on failure.
+
+    This is safe to call repeatedly; only the first successful call installs
+    handlers.  Logging is never configured just by importing this module.
+    """
+    global _logger_configured, _log_file_path
+    if _logger_configured:
+        return _log_file_path
+
+    directory = log_dir or getattr(config, "LOG_DIR", "logs") or "logs"
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError as exc:
+        rprint(f"Perhaps: cannot create log directory {directory!r}: {exc}")
+        return None
+
+    path = os.path.join(
+        directory,
+        f"perhaps-{datetime.date.today().isoformat()}.log",
+    )
+    logger = logging.getLogger(_LOGGER_NAME)
+    logger.propagate = False
+    level_value = level if level is not None else getattr(config, "LOG_LEVEL", "INFO")
+    if isinstance(level_value, str):
+        level_value = getattr(logging, level_value.upper(), logging.INFO)
+    try:
+        logger.setLevel(level_value)
+    except (TypeError, ValueError):
+        logger.setLevel(logging.INFO)
+
+    try:
+        file_handler = logging.FileHandler(path, encoding="utf-8", delay=False)
+    except OSError as exc:
+        rprint(f"Perhaps: cannot open log file {path!r}: {exc}")
+        return None
+    file_handler.setLevel(logger.level)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+        )
+    )
+    file_handler._perhaps_handler = True  # type: ignore[attr-defined]
+    logger.addHandler(file_handler)
+
+    if getattr(config, "LOG_TO_CONSOLE", False):
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logger.level)
+        console_handler.setFormatter(
+            logging.Formatter("[%(levelname)s] %(message)s")
+        )
+        console_handler._perhaps_handler = True  # type: ignore[attr-defined]
+        logger.addHandler(console_handler)
+
+    _logger_configured = True
+    _log_file_path = path
+    logger.info("logging started: %s", path)
+    return path
+
+
+def ensure_logging(force: bool | None = None) -> bool:
+    """Open the log file when config/DebugSwitch says so.
+
+    :param force: ``True``/``False`` overrides config; ``None`` follows
+        ``LOGGING_ENABLED`` / ``AUTO_LOGGING_FROM_DEBUG_SWITCH``.
+    """
+    if _logger_configured:
+        return True
+    enabled = logging_wanted() if force is None else bool(force)
+    if not enabled:
+        return False
+    return configure_logging() is not None
+
+
+def get_logger(name: str = "base") -> logging.Logger:
+    """Return a logger below the ``Perhaps`` namespace, opening logs if needed."""
+    ensure_logging()
+    full_name = _LOGGER_NAME if name in ("", _LOGGER_NAME) else f"{_LOGGER_NAME}.{name}"
+    return logging.getLogger(full_name)
+
+
+def log(message: Any, *args: Any, level: int = logging.INFO, **kwargs: Any) -> None:
+    """Write a normal log line (opens the log file according to config)."""
+    get_logger("log").log(level, str(message), *args, **kwargs)
+
+
+def log_debug(message: Any, *args: Any, **kwargs: Any) -> None:
+    log(message, *args, level=logging.DEBUG, **kwargs)
+
+
+def log_info(message: Any, *args: Any, **kwargs: Any) -> None:
+    log(message, *args, level=logging.INFO, **kwargs)
+
+
+def log_warning(message: Any, *args: Any, **kwargs: Any) -> None:
+    log(message, *args, level=logging.WARNING, **kwargs)
+
+
+def log_error(message: Any, *args: Any, **kwargs: Any) -> None:
+    log(message, *args, level=logging.ERROR, **kwargs)
+
+
+def log_exception(message: Any, exc: BaseException | None = None, *args: Any) -> None:
+    logger = get_logger("exception")
+    if exc is not None:
+        logger.error(str(message), *args, exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.exception(str(message), *args)
+
+
+def record_crash(
+    exc: BaseException,
+    *,
+    context: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> str:
+    """Write a complete crash report and return its path.
+
+    The report includes environment information, the exception type/message,
+    chained exception information and the full formatted traceback.
+    """
+    directory = getattr(config, "LOG_DIR", "logs") or "logs"
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError:
+        directory = "."
+
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    path = os.path.join(directory, f"crash-{stamp}.log")
+    suffix = 1
+    while os.path.exists(path):
+        suffix += 1
+        path = os.path.join(directory, f"crash-{stamp}-{suffix}.log")
+
+    try:
+        traceback_text = "".join(
+            traceback.format_exception(type(exc), exc, exc.__traceback__)
+        )
+        if exc.__traceback__ is None:
+            traceback_text += "\n--- current stack ---\n" + "".join(
+                traceback.format_stack()
+            )
+    except Exception as format_exc:
+        traceback_text = f"<could not format traceback: {format_exc}>{exc!r}"
+
+    lines = [
+        "Perhaps Framework crash report",
+        "=" * 40,
+        f"time      : {datetime.datetime.now().isoformat()}",
+        f"python    : {sys.version}",
+        f"platform  : {platform.platform()}",
+        f"cwd       : {os.getcwd()}",
+        f"argv      : {sys.argv!r}",
+        f"context   : {context or '-'}",
+        "",
+        f"exc type  : {type(exc).__module__}.{type(exc).__qualname__}",
+        f"exc str   : {exc}",
+        f"exc repr  : {exc!r}",
+        f"exc args  : {exc.args!r}",
+        f"cause     : {exc.__cause__!r}",
+        f"context ex: {exc.__context__!r}",
+    ]
+    notes = getattr(exc, "__notes__", None)
+    if notes:
+        lines.append(f"notes     : {notes!r}")
+    if extra:
+        lines.append(f"extra     : {extra!r}")
+    lines.extend(["", "----- traceback -----", traceback_text])
+    content = "\n".join(lines) + "\n"
+
+    try:
+        with open(path, "w", encoding="utf-8") as crash_file:
+            crash_file.write(content)
+    except OSError as exc2:
+        fallback = f"crash-{stamp}.log"
+        with open(fallback, "w", encoding="utf-8") as crash_file:
+            crash_file.write(content)
+        path = fallback
+        rprint(f"Perhaps: could not write {path!r}, wrote {fallback!r}: {exc2}")
+
+    if _logger_configured:
+        try:
+            logging.getLogger(_LOGGER_NAME + ".crash").critical(
+                "crash report written to %s",
+                path,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+        except Exception:
+            pass
+    return path
+
+
+def crash_exit(exc: BaseException, *, context: str | None = None) -> None:
+    """Write a crash report, print a short message and terminate the shell."""
+    path = record_crash(exc, context=context)
+    try:
+        clear()
+    except Exception:
+        pass
+    print("[red]An unexpected exception occurred in your emulator.[/red]")
+    print(f"[red]A crash log was written to '{escape(path)}'.[/red]")
+    print(
+        "[red]If you can submit the crash log to the developer, please do; "
+        "the full traceback is in the file.[/red]"
+    )
+    print()
+    print(f"Short exception: [red]{escape(str(exc))}[/red]")
+    raise SystemExit(1)
+
+
+def install_excepthook() -> None:
+    """Install a crash-reporting ``sys.excepthook`` once."""
+    global _excepthook_installed
+    if _excepthook_installed:
+        return
+    previous_hook = sys.excepthook
+
+    def _hook(exc_type, exc_value, exc_tb):
+        if isinstance(exc_value, SystemExit):
+            previous_hook(exc_type, exc_value, exc_tb)
+            return
+        try:
+            path = record_crash(exc_value, context="uncaught exception")
+            rprint(f"Perhaps: unhandled exception; crash log: {path}")
+        except Exception:
+            pass
+        previous_hook(exc_type, exc_value, exc_tb)
+
+    _hook._perhaps_crash_hook = True  # type: ignore[attr-defined]
+    sys.excepthook = _hook
+    _excepthook_installed = True
+
+
+# endregion
 
 # region Injector
 @dataclass
@@ -728,6 +1020,9 @@ def preload() -> None:
 # region Shell Pre
 def init() -> None:
     """Welcome information."""
+    install_excepthook()
+    ensure_logging()
+    log_info("init: welcome sequence started")
     clear()
     preload()
     if run_injects("before_shell_pre").handled:
@@ -756,10 +1051,11 @@ def main_while(auth: bool | None = None) -> bool:
 
     :param auth: force authentication on/off; ``None`` means "require it
         when the ``login_required`` flag exists".
-
-    return: ``True`` when the session ended normally, ``False`` on auth
+    :return: ``True`` when the session ended normally, ``False`` on auth
         failure.
     """
+    install_excepthook()
+    ensure_logging()
     if not is_initialized():
         ensure_initialized()
     username, password_hash, hostname, salt = read_userinfo()
@@ -767,62 +1063,92 @@ def main_while(auth: bool | None = None) -> bool:
         auth = flags("login_required")
     if auth and not askpass((username, password_hash, hostname, salt)):
         print("Access denied.")
+        log_warning("authentication failed for user=%s", username)
         return False
 
     directory = "~"
     prompt = f"{escape(username)}@{escape(hostname)}:{escape(directory)}$ "
+    log_info(
+        "shell session started user=%s host=%s cwd=%s",
+        username,
+        hostname,
+        os.getcwd(),
+    )
 
-    while True:
-        run_injects("while_head")
-        run_injects("userinfo", username, password_hash, hostname, salt)
-        run_injects("getdir", directory)
+    try:
+        while True:
+            # ``save.DebugSwitch`` can be toggled at runtime; re-check every
+            # loop so debugger > ea DebugSwitch true starts logging at once.
+            ensure_logging()
+            run_injects("while_head")
+            run_injects("userinfo", username, password_hash, hostname, salt)
+            run_injects("getdir", directory)
 
-        directory = run_patcher("directory_patcher", directory)
-        if not isinstance(directory, str):
-            directory = str(directory)
-        prompt = run_patcher(
-            "prompt_patcher",
-            prompt,
-            (username, password_hash, hostname, salt),
-            directory,
-        )
-        if not isinstance(prompt, str):
-            prompt = str(prompt)
-
-        try:
-            ipt = console.input(prompt)
-        except (KeyboardInterrupt, EOFError):
-            run_injects("before_quit")
-            print("\nLogging out...")
-            return True
-
-        if not ipt.strip():
-            continue
-        if ipt.strip().lower() == "exit":
-            run_injects("before_quit")
-            print("\nLogging out...")
-            return True
-
-        report = run_injects("after_enter", ipt)
-        if report.cancelled:
-            continue
-
-        cmd = Command(ipt)
-        cmd.parse()
-        if cmd.parse_error is not None:
-            print(escape(cmd.parse_error))
-            continue
-
-        run_injects("before_execute", cmd)
-        try:
-            returns = cmd.execute()
-        except MissingArgument:
-            print(
-                f"{escape(cmd.head)}: arguments not enough. "
-                f"May you can use `{escape(cmd.head)} help` for information"
+            directory = run_patcher("directory_patcher", directory)
+            if not isinstance(directory, str):
+                directory = str(directory)
+            prompt = run_patcher(
+                "prompt_patcher",
+                prompt,
+                (username, password_hash, hostname, salt),
+                directory,
             )
-            continue
-        run_injects("after_execute", cmd, returns)
+            if not isinstance(prompt, str):
+                prompt = str(prompt)
+
+            try:
+                ipt = console.input(prompt)
+            except (KeyboardInterrupt, EOFError):
+                run_injects("before_quit")
+                print("\nLogging out...")
+                log_info("shell session ended by interrupt/EOF")
+                return True
+
+            if not ipt.strip():
+                continue
+            if ipt.strip().lower() == "exit":
+                run_injects("before_quit")
+                print("\nLogging out...")
+                log_info("shell session ended by exit command")
+                return True
+
+            log_info("command: %s", ipt)
+            report = run_injects("after_enter", ipt)
+            if report.cancelled:
+                log_info("command cancelled by after_enter inject")
+                continue
+
+            cmd = Command(ipt)
+            cmd.parse()
+            if cmd.parse_error is not None:
+                print(escape(cmd.parse_error))
+                log_warning("command parse error: %s", cmd.parse_error)
+                continue
+
+            run_injects("before_execute", cmd)
+            try:
+                returns = cmd.execute()
+            except MissingArgument:
+                print(
+                    f"{escape(cmd.head)}: arguments not enough. "
+                    f"May you can use `{escape(cmd.head)} help` for information"
+                )
+                log_warning("command %r is missing an argument", cmd.head)
+                continue
+            log_info("command %r finished with %d result(s)", ipt, len(returns))
+            run_injects("after_execute", cmd, returns)
+
+    except (KeyboardInterrupt, EOFError):
+        run_injects("before_quit")
+        print("\nLogging out...")
+        log_info("shell session ended by interrupt/EOF")
+        return True
+    except Exception as exc:
+        log_exception("unhandled exception in main_while", exc)
+        crash_exit(
+            exc,
+            context=f"main_while user={username!r} host={hostname!r}",
+        )
 
 
 # endregion

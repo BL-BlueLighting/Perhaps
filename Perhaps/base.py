@@ -27,6 +27,7 @@ import os
 import random
 import shlex
 import tempfile
+import argparse
 from dataclasses import dataclass, field
 from time import sleep
 from typing import Any, Callable
@@ -381,6 +382,7 @@ class Arguments:
 
     def __repr__(self) -> str:
         return f"Arguments({self.args!r})"
+
 
 
 class Command:
@@ -754,7 +756,8 @@ def main_while(auth: bool | None = None) -> bool:
 
     :param auth: force authentication on/off; ``None`` means "require it
         when the ``login_required`` flag exists".
-    :return: ``True`` when the session ended normally, ``False`` on auth
+
+    return: ``True`` when the session ended normally, ``False`` on auth
         failure.
     """
     if not is_initialized():
@@ -789,12 +792,14 @@ def main_while(auth: bool | None = None) -> bool:
         try:
             ipt = console.input(prompt)
         except (KeyboardInterrupt, EOFError):
+            run_injects("before_quit")
             print("\nLogging out...")
             return True
 
         if not ipt.strip():
             continue
         if ipt.strip().lower() == "exit":
+            run_injects("before_quit")
             print("\nLogging out...")
             return True
 

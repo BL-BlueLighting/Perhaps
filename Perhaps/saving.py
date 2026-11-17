@@ -106,10 +106,10 @@ class Save:
         return self.statuses.get(name, default)
 
     # ------------------------------------------------------------------ json
-    def to_json(self) -> str:
+    def to_json(self, indent: int = -1) -> str:
         """Serialize the state to a JSON string."""
         try:
-            return json.dumps(self.statuses, ensure_ascii=False)
+            return json.dumps(self.statuses, ensure_ascii=False, indent=indent)
         except TypeError as exc:
             raise TypeError(f"save state is not JSON serializable: {exc}") from exc
 

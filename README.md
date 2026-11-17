@@ -37,6 +37,7 @@ fm.main_while()
 - 导入 `Perhaps` 不再需要 `texts/initpre.txt`；`init()` 在文件缺失时会跳过开机文本。
 - 首次运行如果缺少 `flags/userinfo`，会自动进入 `setup()` 设置账号；设置完成后会提示重启并退出，重新启动后若存在 `flags/login_required` 需要密码。
 - 老存档没有 `flags/login_required` 时保持免密进入。
+- 存档默认自动读档/退出自动保存；开关在 `Perhaps/config.py`，开发者可关闭或注册自己的 `before_quit` 接管流程。
 - `flags/` 下的文件名会做路径校验，不能包含 `/`、`..` 等。
 
 ## 提示

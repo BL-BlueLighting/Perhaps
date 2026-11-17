@@ -8,6 +8,7 @@ the virtual file system, plus the tiny ``clear``/``echo`` built-ins from
 dialogue command and should be imported explicitly by the story that uses it.
 """
 
+from . import config
 from .base import *
 from .saving import *
 from .fastutil import *

@@ -13,13 +13,14 @@ import getpass
 import os
 from typing import Any
 
+from Perhaps import config
 from Perhaps.base import *
 from Perhaps.base import ask_password_once as _base_ask_password_once
 from Perhaps.fileutil import *
 from Perhaps.fileutil import PermEnum, CreateFile, CreateDirectory, WriteFile
 from Perhaps.saving import *
 
-slot: int = 0
+slot: int = config.DEFAULT_SLOT
 
 
 # region Functions / Variables
@@ -83,12 +84,21 @@ def askyn(__prompt: str = "确定吗？[Y/n]", default: str = "y") -> bool:
     return default.strip().lower() == "y"
 
 
-def svslot(x: int) -> None:
-    """Set the active save slot."""
+def svslot(x: int, load: bool | None = None) -> None:
+    """Set the active save slot.
+
+    :param load: ``None`` follows ``config.AUTO_LOAD_ON_SLOT_SELECT``; pass
+        ``False`` for callers that are about to write the slot instead
+        (``svsslot`` / ``svoslot`` / ``svdslot``).
+    """
     global slot
     if not isinstance(x, int) or isinstance(x, bool) or x < 0:
         raise ValueError("save slot must be a non-negative integer")
     slot = x
+    if load is None:
+        load = config.SAVE_PATCH_ENABLED and config.AUTO_LOAD_ON_SLOT_SELECT
+    if load:
+        svreload()
 
 
 def _slot_file(x: int | None = None) -> str:
@@ -140,7 +150,7 @@ def svsslot() -> bool:
         if not askyn(":: 检测到该槽位已有存档，仍要覆盖吗？[Y/n]", "n"):
             print(":: 已取消操作。")
             return False
-    svslot(chosen)
+    svslot(chosen, load=False)
     saveitp()
     return True
 
@@ -155,7 +165,7 @@ def svoslot() -> bool:
     print(":: [red]请注意，您加载存档后，目前内存中的存档将被覆盖。[/red]")
     if askyn(":: 继续吗？[Y/n] ", "y"):
         print(":: 稍等，正在加载...")
-        svslot(chosen)
+        svslot(chosen, load=False)
         svreload()
         print(":: 存档加载成功。")
         console.input("[dim]Enter 继续游戏 >[/dim] ")
@@ -163,7 +173,7 @@ def svoslot() -> bool:
     if askyn(":: 是否要保存内存存档到新的槽位中继续？[Y/n]", "y"):
         if svsslot():
             print(":: 正在加载槽位...")
-            svslot(chosen)
+            svslot(chosen, load=False)
             svreload()
             print(":: 存档加载成功。")
             console.input("[dim]Enter 继续游戏 >[/dim] ")
@@ -189,7 +199,7 @@ def svdslot() -> bool:
     print(":: 稍等，正在切换存档...")
     mkflag("defaultslot", str(chosen))
     if askyn(":: 是否要立即加载该存档槽位？[Y/n]", "n"):
-        svslot(chosen)
+        svslot(chosen, load=False)
         svreload()
         print(":: 存档加载成功。")
         console.input("[dim]Enter 继续游戏 >[/dim] ")
@@ -517,19 +527,42 @@ def saveslot(args: Arguments) -> None:
 # endregion
 
 # region Default slot
-def load_default_slot() -> None:
+def load_default_slot() -> bool:
     """Load ``flags/defaultslot`` if it exists and points at a valid slot."""
     if not flags("defaultslot"):
-        return
+        return False
     try:
         chosen = int(rdflag("defaultslot").strip())
-        svslot(chosen)
+        svslot(chosen, load=False)
         svreload()
+        return True
     except (TypeError, ValueError, OSError) as exc:
         print(f":: [yellow]默认存档槽位无效，已忽略：{escape(str(exc))}[/yellow]")
+        return False
+
+
+@inject("before_quit")
+def _auto_save_on_exit() -> None:
+    """Save the active slot when the shell exits normally."""
+    if not (config.SAVE_PATCH_ENABLED and config.AUTO_SAVE_ON_EXIT):
+        return
+    # storyWhere is a core save key; initialize it even when the story has
+    # not touched it yet, so every save carries the current story position.
+    if not save.gotattr("storyWhere"):
+        save.storyWhere = "1000"
+    try:
+        saveit()
+    except (OSError, TypeError, ValueError) as exc:
+        print(f":: [yellow]自动存档失败：{escape(str(exc))}[/yellow]")
 
 
 # The historical behaviour was "load the default slot while importing
 # Perhaps.fastutil".  Keep it, but never let a broken slot crash the import.
-load_default_slot()
+if not load_default_slot():
+    if (
+        config.SAVE_PATCH_ENABLED
+        and config.AUTO_LOAD_ON_START
+        and os.path.isfile(_slot_file())
+    ):
+        svreload()
 # endregion

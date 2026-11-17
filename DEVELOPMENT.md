@@ -28,6 +28,7 @@
 | `after_enter` | 用户敲下回车后，命令解析前 | `input: str` |
 | `before_execute` | 命令解析完成、执行前 | `cmd: Command` |
 | `after_execute` | 命令执行后 | `cmd: Command`, `returns: list[Arguments]` |
+| `before_quit` | 主循环正常退出（`exit` / Ctrl-D / Ctrl-C）前 | 无 |
 
 `before_setup` / `before_load` / `before_shell_pre` 返回 `Handled()` 可跳过框架默认逻辑；
 `after_enter` 返回 `Cancel()` 会跳过命令解析。
@@ -120,6 +121,9 @@ def _(args: Arguments):
 
 ### 存档 / 虚拟文件系统
 
+- `Perhaps/config.py` 提供存档流程开关（默认全开）：`SAVE_PATCH_ENABLED`、`AUTO_LOAD_ON_START`、`AUTO_LOAD_ON_SLOT_SELECT`、`AUTO_SAVE_ON_EXIT`、`DEFAULT_SLOT`。
+- 默认行为：导入 fastutil 时加载当前槽位；`svslot(n)` 选中后立即读取槽位 `n`；主循环正常退出时通过 `before_quit` 自动保存当前完整 `save.statuses`（含 `storyWhere`、别名等）。
+- 需要自己控制存档流程时，可在启动前修改 `Perhaps.config` 或注册自己的 `before_quit` 注入；`svsslot` / `svoslot` / `svdslot` 内部使用 `svslot(..., load=False)`，不会在写档前误读旧档。
 - `Save` 的 `load/save` 只接受相对路径，拒绝 `..`/绝对路径；写入使用临时文件 + `os.replace`，不会产生半截 JSON。
 - `fs_writesave(fs)` 保存的是 JSON，`fs_fromsave()` 返回重建后的 `FileSystem`，`fs_initialize(fs)` 会真正把存档加载进传入的文件系统并切换全局文件系统。
 - `FileSystem.DumpToFile()` / `LoadFromFile()` 使用带版本号的 JSON，正文里出现 `;`、`]`、`}`、逗号、数字串都能正确往返。
